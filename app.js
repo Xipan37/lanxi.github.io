@@ -19,12 +19,13 @@ const Store = {
       userAvatar: '👤', characterAvatar: '✨',
       replyMin: 3, replyMax: 300,
       autoMsg: false, autoInterval: 600, letterInterval: 4,
-      combine: false, combineCount: 3,
+      combine: false, combineMin: 2, combineMax: 5,
       themeColor: '#d48bb5', autoReply: true,
       userBubbleColor: '#d48bb5', charBubbleColor: '#f0e6ee',
       chatBgType: 'color', chatBgColor: '#faf5f8', chatBgImage: null,
       fontSize: 15, useSystemFont: false,
-      showChatAvatar: true, timestampStyle: 'default'
+      showChatAvatar: true, timestampStyle: 'default',
+      loadingBgType: 'color', loadingBgColor: '#faf5f8', loadingBgValue: null
     };
     const saved = this._get('settings');
     return saved ? { ...defaults, ...saved } : defaults;
@@ -71,23 +72,38 @@ const Store = {
   },
   getCardGroups() {
     const cards = this.getCards();
-    const groups = [...new Set(cards.map(c => c.group || ''))];
-    groups.sort((a, b) => {
+    const fromCards = [...new Set(cards.map(c => c.group || ''))];
+    const stored = this._get('cardGroups') || [];
+    const merged = [...new Set([...stored, ...fromCards])];
+    merged.sort((a, b) => {
       if (!a && b) return -1;
       if (a && !b) return 1;
       return a.localeCompare(b, 'zh');
     });
-    return groups;
+    return merged;
   },
   renameGroup(oldName, newName) {
     const cards = this.getCards();
     cards.forEach(c => { if ((c.group || '') === oldName) c.group = newName; });
     this.saveCards(cards);
+    const stored = this._get('cardGroups') || [];
+    const idx = stored.indexOf(oldName);
+    if (idx !== -1) { stored[idx] = newName; this._set('cardGroups', stored); }
   },
   deleteGroup(name) {
     const cards = this.getCards();
     cards.forEach(c => { if ((c.group || '') === name) c.group = ''; });
     this.saveCards(cards);
+    const stored = this._get('cardGroups') || [];
+    this._set('cardGroups', stored.filter(g => g !== name));
+  },
+  addGroup(name) {
+    const groups = this.getCardGroups();
+    if (groups.includes(name)) return false;
+    const stored = this._get('cardGroups') || [];
+    stored.push(name);
+    this._set('cardGroups', stored);
+    return true;
   },
 
   getEmojis() {
@@ -580,10 +596,11 @@ const Chat = {
     let cardIds = [];
 
     if (settings.combine) {
-      const count = Math.min(settings.combineCount, allSources.length);
+      const count = rand(settings.combineMin, settings.combineMax);
+      const actualCount = Math.min(count, allSources.length);
       const picked = [];
       const used = new Set();
-      while (picked.length < count) {
+      while (picked.length < actualCount) {
         const idx = rand(0, allSources.length - 1);
         if (used.has(idx)) continue;
         used.add(idx);
@@ -1101,8 +1118,10 @@ const Settings = {
     document.getElementById('settings-auto-msg').checked = s.autoMsg;
     document.getElementById('settings-auto-interval').value = s.autoInterval;
     document.getElementById('settings-combine').checked = s.combine;
-    document.getElementById('settings-combine-count').value = s.combineCount;
-    document.getElementById('settings-combine-count-label').textContent = s.combineCount + '句';
+    document.getElementById('settings-combine-min').value = s.combineMin;
+    document.getElementById('settings-combine-min-label').textContent = s.combineMin + '句';
+    document.getElementById('settings-combine-max').value = s.combineMax;
+    document.getElementById('settings-combine-max-label').textContent = s.combineMax + '句';
     document.getElementById('toggle-combine').checked = s.combine;
     document.getElementById('settings-theme-color').value = s.themeColor;
     document.getElementById('settings-user-bubble').value = s.userBubbleColor;
@@ -1118,11 +1137,16 @@ const Settings = {
     document.getElementById('settings-auto-reply').checked = s.autoReply !== false;
     document.getElementById('settings-letter-interval').value = s.letterInterval;
     document.getElementById('settings-letter-interval-label').textContent = s.letterInterval + '小时';
+    document.getElementById('settings-loading-bg-type-color').checked = s.loadingBgType === 'color';
+    document.getElementById('settings-loading-bg-type-image').checked = s.loadingBgType === 'image';
+    document.getElementById('settings-loading-bg-type-video').checked = s.loadingBgType === 'video';
+    document.getElementById('settings-loading-bg-color').value = s.loadingBgColor;
     this._updateSliderLabels(s);
     this._updateAutoIntervalVisibility(s.autoMsg);
     this._updateHeader();
     this._updateCombineUI(s);
     this._updateChatBgUI(s);
+    this._updateLoadingBgUI(s);
     applyAppearance(s);
   },
 
@@ -1150,13 +1174,20 @@ const Settings = {
   },
 
   _updateCombineUI(s) {
-    document.getElementById('settings-combine-count-row').style.display = s.combine ? 'flex' : 'none';
+    document.getElementById('settings-combine-min-row').style.display = s.combine ? 'flex' : 'none';
+    document.getElementById('settings-combine-max-row').style.display = s.combine ? 'flex' : 'none';
   },
 
   _updateChatBgUI(s) {
     const isImage = s.chatBgType === 'image';
     document.getElementById('settings-chat-bg-file-row').style.display = isImage ? 'flex' : 'none';
     document.getElementById('settings-chat-bg-color-row').style.display = isImage ? 'none' : 'flex';
+  },
+
+  _updateLoadingBgUI(s) {
+    const isColor = s.loadingBgType === 'color';
+    document.getElementById('settings-loading-bg-color-row').style.display = isColor ? 'flex' : 'none';
+    document.getElementById('settings-loading-bg-file-row').style.display = isColor ? 'none' : 'flex';
   },
 
   _updateHeader() {
@@ -1185,12 +1216,16 @@ const Settings = {
     s.autoMsg = document.getElementById('settings-auto-msg').checked;
     s.autoInterval = Number(document.getElementById('settings-auto-interval').value);
     s.combine = document.getElementById('settings-combine').checked;
-    s.combineCount = Number(document.getElementById('settings-combine-count').value);
+    s.combineMin = Number(document.getElementById('settings-combine-min').value);
+    s.combineMax = Number(document.getElementById('settings-combine-max').value);
+    if (s.combineMin > s.combineMax) s.combineMax = s.combineMin;
     s.themeColor = document.getElementById('settings-theme-color').value;
     s.userBubbleColor = document.getElementById('settings-user-bubble').value;
     s.charBubbleColor = document.getElementById('settings-char-bubble').value;
     s.chatBgColor = document.getElementById('settings-chat-bg-color').value;
     s.chatBgType = document.getElementById('settings-chat-bg-type-color').checked ? 'color' : 'image';
+    s.loadingBgColor = document.getElementById('settings-loading-bg-color').value;
+    s.loadingBgType = document.getElementById('settings-loading-bg-type-color').checked ? 'color' : document.getElementById('settings-loading-bg-type-image').checked ? 'image' : 'video';
     s.fontSize = Number(document.getElementById('settings-font-size').value);
     s.useSystemFont = document.getElementById('settings-use-system-font').checked;
     s.showChatAvatar = document.getElementById('settings-show-chat-avatar').checked;
@@ -1203,6 +1238,7 @@ const Settings = {
     document.getElementById('toggle-combine').checked = s.combine;
     this._updateCombineUI(s);
     this._updateChatBgUI(s);
+    this._updateLoadingBgUI(s);
     if (Chat._startProactiveMessages) {
       Chat._startProactiveMessages();
     }
@@ -1261,9 +1297,18 @@ const Settings = {
       showModal('atmosphere-modal');
     });
 
-    document.getElementById('settings-combine-count').addEventListener('input', () => {
-      const val = Number(document.getElementById('settings-combine-count').value);
-      document.getElementById('settings-combine-count-label').textContent = val + '句';
+    document.getElementById('settings-combine-min').addEventListener('input', () => {
+      let val = Number(document.getElementById('settings-combine-min').value);
+      const maxVal = Number(document.getElementById('settings-combine-max').value);
+      if (val > maxVal) { val = maxVal; document.getElementById('settings-combine-min').value = val; }
+      document.getElementById('settings-combine-min-label').textContent = val + '句';
+      saveDebounced();
+    });
+    document.getElementById('settings-combine-max').addEventListener('input', () => {
+      let val = Number(document.getElementById('settings-combine-max').value);
+      const minVal = Number(document.getElementById('settings-combine-min').value);
+      if (val < minVal) { val = minVal; document.getElementById('settings-combine-max').value = val; }
+      document.getElementById('settings-combine-max-label').textContent = val + '句';
       saveDebounced();
     });
 
@@ -1326,6 +1371,106 @@ const Settings = {
       this._updateChatBgUI(s);
       applyAppearance(s);
       saveDebounced();
+    });
+
+    // Loading background settings
+    document.querySelectorAll('input[name="loading-bg-type"]').forEach(el => {
+      el.addEventListener('change', () => {
+        const type = document.getElementById('settings-loading-bg-type-color').checked ? 'color' : document.getElementById('settings-loading-bg-type-image').checked ? 'image' : 'video';
+        const s = Store.getSettings(); s.loadingBgType = type;
+        Store.saveSettings(s);
+        this._updateLoadingBgUI(s);
+        toast('加载背景类型已更新');
+      });
+    });
+    document.getElementById('settings-loading-bg-color').addEventListener('input', () => {
+      const s = Store.getSettings(); s.loadingBgColor = document.getElementById('settings-loading-bg-color').value;
+      saveDebounced();
+    });
+    document.getElementById('btn-loading-bg-upload').addEventListener('click', () => {
+      document.getElementById('loading-bg-file-input').click();
+    });
+
+    // Crop modal
+    let _cropCallback = null;
+    function openCropModal(dataUrl, callback) {
+      _cropCallback = callback;
+      const img = document.getElementById('crop-image');
+      img.src = dataUrl;
+      document.getElementById('crop-zoom').value = 100;
+      document.getElementById('crop-zoom-label').textContent = '100%';
+      img.style.transform = 'translate(-50%,-50%) scale(1)';
+      img.dataset.zoom = '1';
+      showModal('crop-modal');
+    }
+    document.getElementById('crop-zoom').addEventListener('input', () => {
+      const val = Number(document.getElementById('crop-zoom').value);
+      document.getElementById('crop-zoom-label').textContent = val + '%';
+      const img = document.getElementById('crop-image');
+      img.style.transform = `translate(-50%,-50%) scale(${val / 100})`;
+      img.dataset.zoom = val / 100;
+    });
+    document.getElementById('crop-confirm').addEventListener('click', () => {
+      const img = document.getElementById('crop-image');
+      const container = document.getElementById('crop-container');
+      const zoom = Number(img.dataset.zoom) || 1;
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const iw = img.naturalWidth;
+      const ih = img.naturalHeight;
+      const canvas = document.createElement('canvas');
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext('2d');
+      const sx = Math.max(0, (iw * zoom - cw) / 2 / zoom);
+      const sy = Math.max(0, (ih * zoom - ch) / 2 / zoom);
+      const sw = Math.min(iw, cw / zoom);
+      const sh = Math.min(ih, ch / zoom);
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, cw, ch);
+      const cropped = canvas.toDataURL('image/jpeg', 0.9);
+      if (_cropCallback) _cropCallback(cropped);
+      _cropCallback = null;
+      hideModal('crop-modal');
+      toast('图片已裁剪');
+    });
+    document.getElementById('loading-bg-file-input').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const isVideo = file.type.startsWith('video/');
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        if (isVideo) {
+          const s = Store.getSettings();
+          s.loadingBgValue = dataUrl;
+          s.loadingBgType = 'video';
+          document.getElementById('settings-loading-bg-type-video').checked = true;
+          Store.saveSettings(s);
+          this._updateLoadingBgUI(s);
+          toast('视频背景已更新');
+        } else {
+          openCropModal(dataUrl, (croppedDataUrl) => {
+            const s = Store.getSettings();
+            s.loadingBgValue = croppedDataUrl;
+            s.loadingBgType = 'image';
+            document.getElementById('settings-loading-bg-type-image').checked = true;
+            Store.saveSettings(s);
+            this._updateLoadingBgUI(s);
+            toast('图片背景已更新');
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+      e.target.value = '';
+    });
+    document.getElementById('btn-loading-bg-clear').addEventListener('click', () => {
+      const s = Store.getSettings();
+      s.loadingBgValue = null;
+      s.loadingBgType = 'color';
+      document.getElementById('settings-loading-bg-type-color').checked = true;
+      Store.saveSettings(s);
+      this._updateLoadingBgUI(s);
+      toast('已恢复默认加载背景');
     });
 
     document.getElementById('settings-font-size').addEventListener('input', () => {
@@ -1714,7 +1859,56 @@ function init() {
     Cards.renderCards();
     Cards.refreshGroupFilter();
     hideModal('batch-modal');
-    toast(`成功导入 ${count} 张字卡${lines.length - count > 0 ? `，跳过 ${lines.length - count} 个重复` : ''}`);
+      toast(`成功导入 ${count} 张字卡${lines.length - count > 0 ? `，跳过 ${lines.length - count} 个重复` : ''}`);
+    });
+
+  // Card JSON export
+  document.getElementById('btn-export-cards').addEventListener('click', () => {
+    const cards = Store.getCards();
+    const blob = new Blob([JSON.stringify(cards, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `字卡库_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('字卡已导出');
+  });
+
+  // Card JSON import
+  document.getElementById('btn-import-cards').addEventListener('click', () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const imported = JSON.parse(ev.target.result);
+          if (!Array.isArray(imported)) throw new Error('not array');
+          const existing = Store.getCards();
+          const existingTexts = new Set(existing.map(c => c.text));
+          let added = 0;
+          imported.forEach(c => {
+            if (c.text && !existingTexts.has(c.text)) {
+              existing.push({ id: Store._genId(), text: c.text, type: 'card', group: c.group || '' });
+              existingTexts.add(c.text);
+              added++;
+            }
+          });
+          Store.saveCards(existing);
+          Cards.renderCards();
+          Cards.refreshGroupFilter();
+          toast(`成功导入 ${added} 张字卡${imported.length - added > 0 ? `，跳过 ${imported.length - added} 个重复` : ''}`);
+        } catch {
+          toast('导入失败，请检查JSON格式');
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
   });
 
   // Card search & group filter
@@ -1772,6 +1966,25 @@ function init() {
       });
     });
   }
+
+  // Add group button
+  document.getElementById('btn-group-add').addEventListener('click', () => {
+    const input = document.getElementById('group-add-input');
+    const name = input.value.trim();
+    if (!name) { toast('请输入分组名称'); return; }
+    if (Store.addGroup(name)) {
+      renderGroupList();
+      Cards.renderCards();
+      Cards.refreshGroupFilter();
+      input.value = '';
+      toast(`已添加分组"${name}"`);
+    } else {
+      toast('分组已存在');
+    }
+  });
+  document.getElementById('group-add-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('btn-group-add').click();
+  });
 
   // ---- Batch Management ----
   let _cardBatchMode = false;
@@ -2539,7 +2752,26 @@ Letters._ensureProactiveLetters = function() {
 Letters._ensureProactiveLetters();
 
 // Loading animation
+function applyLoadingBg() {
+  const s = Store.getSettings();
+  const overlay = document.getElementById('loading-overlay');
+  const media = document.getElementById('loading-bg-media');
+  if (!overlay) return;
+  if (s.loadingBgType === 'color') {
+    overlay.style.background = s.loadingBgColor;
+    media.innerHTML = '';
+  } else if (s.loadingBgValue) {
+    overlay.style.background = 'transparent';
+    if (s.loadingBgType === 'video') {
+      media.innerHTML = `<video src="${s.loadingBgValue}" autoplay muted loop playsinline></video>`;
+    } else {
+      media.innerHTML = `<img src="${s.loadingBgValue}" alt="">`;
+    }
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  applyLoadingBg();
   const bar = document.getElementById('loading-bar');
   const percent = document.getElementById('loading-percent');
   const overlay = document.getElementById('loading-overlay');
