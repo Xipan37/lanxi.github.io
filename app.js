@@ -811,11 +811,12 @@ const Cards = {
     const card = Store.getCards().find(c => c.id === id);
     if (!card) return;
     document.getElementById('edit-card-input').value = card.text;
-    document.getElementById('edit-card-group-input').value = card.group || '';
+    renderEditCardGroups(card.group || '');
     showModal('edit-card-modal');
     document.getElementById('edit-card-confirm').onclick = () => {
       const text = document.getElementById('edit-card-input').value.trim();
-      const group = document.getElementById('edit-card-group-input').value.trim();
+      const selected = document.querySelector('#edit-card-groups .group-btn.active');
+      const group = selected ? selected.dataset.group : '';
       if (!text) { toast('内容不能为空'); return; }
       Store.updateCard(id, text, group);
       hideModal('edit-card-modal');
@@ -884,8 +885,10 @@ const Letters = {
     }
     container.innerHTML = letters.map(l => {
       const isReply = l.replyToId != null;
-      const statusLabel = l.status === 'replied' ? '已回复' : (l.status === 'read' ? '已读' : '未读');
-      const statusClass = l.status;
+      const origLetter = isReply ? Store.getLetters().find(x => x.id === l.replyToId) : null;
+      const hasReply = Store.getLetters().some(x => x.replyToId === l.id);
+      const statusLabel = hasReply ? '已回复' : '未回复';
+      const statusClass = hasReply ? 'replied' : 'pending';
       return `<div class="letter-item" data-id="${l.id}">
         <div class="letter-preview">
           <span class="letter-sender">${isReply ? '回复：' : ''}${charName}</span>
@@ -910,9 +913,9 @@ const Letters = {
       return;
     }
     container.innerHTML = letters.map(l => {
-      const reply = l.replyContent ? Store.getLetters().find(r => r.id === l.replyContent) : null;
-      const statusLabel = l.status === 'replied' ? `${charName}已回复` : '等待回复';
-      const statusClass = l.status;
+      const charReplied = Store.getLetters().some(x => x.replyToId === l.id && x.sender === 'character');
+      const statusLabel = charReplied ? `${charName}已回复` : '未回复';
+      const statusClass = charReplied ? 'replied' : 'pending';
       return `<div class="letter-item" data-id="${l.id}">
         <div class="letter-preview">
           <span class="letter-sender">寄给 ${charName}</span>
@@ -951,9 +954,22 @@ const Letters = {
     document.getElementById('letter-detail-time').textContent = fmtDate(letter.timestamp);
     document.getElementById('letter-detail-body').textContent = letter.content;
 
+    // Show status badge
+    const statusEl = document.getElementById('letter-detail-status');
+    if (letter.sender === 'character') {
+      const hasReply = Store.getLetters().some(l => l.replyToId === letter.id && l.sender === 'user');
+      statusEl.textContent = hasReply ? '已回复' : '未回复';
+      statusEl.className = 'letter-status ' + (hasReply ? 'replied' : 'pending');
+    } else {
+      const charReplied = letter.status === 'replied' || Store.getLetters().some(l => l.replyToId === letter.id && l.sender === 'character');
+      statusEl.textContent = charReplied ? '已回复' : '未回复';
+      statusEl.className = 'letter-status ' + (charReplied ? 'replied' : 'pending');
+    }
+
     const replyArea = document.getElementById('letter-detail-reply');
     const replyBody = document.getElementById('letter-detail-reply-body');
     const replyTime = document.getElementById('letter-detail-reply-time');
+    const replyStatus = document.getElementById('letter-detail-reply-status');
 
     if (letter.replyContent) {
       const replyLetter = Store.getLetters().find(l => l.id === letter.replyContent);
@@ -961,11 +977,45 @@ const Letters = {
         replyArea.classList.remove('hidden');
         replyBody.textContent = replyLetter.content;
         replyTime.textContent = fmtDate(replyLetter.timestamp);
+        const hasReReply = Store.getLetters().some(l => l.replyToId === replyLetter.id && l.sender === 'user');
+        replyStatus.textContent = hasReReply ? '已回复' : '未回复';
+        replyStatus.className = 'letter-status ' + (hasReReply ? 'replied' : 'pending');
       } else {
         replyArea.classList.add('hidden');
       }
     } else {
       replyArea.classList.add('hidden');
+    }
+
+    // Action buttons
+    const actionsEl = document.getElementById('letter-detail-actions');
+    const replyBtn = document.getElementById('letter-btn-reply');
+    const editBtn = document.getElementById('letter-btn-edit');
+    actionsEl.classList.remove('hidden');
+
+    if (letter.sender === 'character' && !letter.replyToId) {
+      // Character's incoming letter → show "回复" button
+      const userReply = Store.getLetters().find(l => l.replyToId === letter.id && l.sender === 'user');
+      replyBtn.classList.remove('hidden');
+      replyBtn.dataset.replyToId = letter.id;
+      if (userReply) {
+        editBtn.classList.remove('hidden');
+        editBtn.dataset.editId = userReply.id;
+      } else {
+        editBtn.classList.add('hidden');
+      }
+    } else if (letter.sender === 'user') {
+      replyBtn.classList.add('hidden');
+      // User's sent letter: show edit if not yet replied by character
+      const charReplied = Store.getLetters().some(l => l.replyToId === letter.id && l.sender === 'character');
+      if (!charReplied && letter.replyToId) {
+        editBtn.classList.remove('hidden');
+        editBtn.dataset.editId = letter.id;
+      } else {
+        editBtn.classList.add('hidden');
+      }
+    } else {
+      actionsEl.classList.add('hidden');
     }
 
     if (letter.sender === 'character' && letter.status === 'pending') {
@@ -976,12 +1026,27 @@ const Letters = {
     showModal('letter-detail-modal');
   },
 
-  sendLetter(content) {
+  sendLetter(content, replyToId) {
     if (!content.trim()) { toast('请写入信内容'); return; }
-    const letter = Store.addLetter('user', content.trim());
-    toast('信件已寄出，梦角将在12小时内回复 ✨');
+    const letter = Store.addLetter('user', content.trim(), replyToId || null);
+    if (!replyToId) {
+      toast('信件已寄出，梦角将在12小时内回复 ✨');
+      this.render();
+      this.scheduleLetterReply(letter.id);
+    } else {
+      toast('回复已寄出 ✨');
+      this.render();
+      if (!Store.getLetters().find(l => l.replyToId === replyToId && l.sender === 'character')) {
+        this.scheduleLetterReply(letter.id);
+      }
+    }
+  },
+
+  editLetter(id, newContent) {
+    if (!newContent.trim()) { toast('内容不能为空'); return; }
+    Store.updateLetter(id, { content: newContent.trim() });
+    toast('回复已修改 ✨');
     this.render();
-    this.scheduleLetterReply(letter.id);
   },
 
   scheduleLetterReply(letterId) {
@@ -1001,10 +1066,10 @@ const Letters = {
       content += src.text;
       if (i < sentenceCount - 1 && Math.random() > 0.5) content += '。';
     }
-    const reply = Store.addLetter('character', content, null);
+    const reply = Store.addLetter('character', content, letterId);
     Store.updateLetter(letterId, { status: 'replied', replyContent: reply.id });
     this.render();
-    toast('梦角回复了你的信 ✨');
+    showLetterNotification(reply, true);
   },
 
   checkPendingReplies() {
@@ -1040,7 +1105,7 @@ const Letters = {
       }
       const letter = Store.addLetter('character', content, null);
       this.render();
-      toast('梦角寄来了一封信 ✉️');
+      showLetterNotification(letter, false);
     }, 4 * 60 * 60 * 1000);
   }
 };
@@ -1619,7 +1684,7 @@ function init() {
     item.addEventListener('click', () => {
       dropdown.classList.add('hidden');
       const action = item.dataset.action;
-      if (action === 'cards' || action === 'letters' || action === 'settings') {
+      if (action === 'chat' || action === 'cards' || action === 'letters' || action === 'settings') {
         const target = document.querySelector(`.nav-item[data-tab="${action}"]`);
         if (target) target.click();
       } else if (action === 'change-icon') {
@@ -1827,40 +1892,95 @@ function init() {
   // Add card
   document.getElementById('btn-add-card').addEventListener('click', () => {
     document.getElementById('add-card-input').value = '';
-    document.getElementById('add-card-group-input').value = '';
+    renderAddCardGroups();
     showModal('add-card-modal');
   });
   document.getElementById('add-card-confirm').addEventListener('click', () => {
     const text = document.getElementById('add-card-input').value.trim();
-    const group = document.getElementById('add-card-group-input').value.trim();
+    const selected = document.querySelector('#add-card-groups .group-btn.active');
+    const group = selected ? selected.dataset.group : '';
     if (!text) { toast('内容不能为空'); return; }
-    if (Store.addCard(text, group)) {
-      toast('已添加');
-      Cards.renderCards();
-      Cards.refreshGroupFilter();
-      hideModal('add-card-modal');
-    } else {
-      toast('已存在相同字卡');
-    }
+    toast('添加中...');
+    setTimeout(() => {
+      if (Store.addCard(text, group)) {
+        Cards.renderCards();
+        Cards.refreshGroupFilter();
+        hideModal('add-card-modal');
+        toast('添加完成');
+      } else {
+        toast('已存在相同字卡');
+      }
+    }, 200);
   });
+
+  function renderAddCardGroups() {
+    const container = document.getElementById('add-card-groups');
+    const groups = Store.getCardGroups();
+    let html = `<button class="group-btn active" data-group="">未分组</button>`;
+    groups.forEach(g => {
+      if (!g) return;
+      html += `<button class="group-btn" data-group="${Cards._escapeHtml(g)}">${Cards._escapeHtml(g)}</button>`;
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.group-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
 
   // Batch import
   document.getElementById('btn-batch-import').addEventListener('click', () => {
     document.getElementById('batch-input').value = '';
-    document.getElementById('batch-group-input').value = '';
+    renderBatchGroups();
     showModal('batch-modal');
   });
+  function renderBatchGroups() {
+    const container = document.getElementById('batch-groups');
+    const groups = Store.getCardGroups();
+    let html = `<button class="group-btn active" data-group="">未分组</button>`;
+    groups.forEach(g => {
+      if (!g) return;
+      html += `<button class="group-btn" data-group="${Cards._escapeHtml(g)}">${Cards._escapeHtml(g)}</button>`;
+    });
+    container.innerHTML = html;
+    container.querySelectorAll('.group-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
   document.getElementById('batch-confirm').addEventListener('click', () => {
     const text = document.getElementById('batch-input').value;
-    const group = document.getElementById('batch-group-input').value.trim();
+    const selected = document.querySelector('#batch-groups .group-btn.active');
+    const group = selected ? selected.dataset.group : '';
     const lines = text.split('\n').filter(l => l.trim());
     if (!lines.length) { toast('请输入内容'); return; }
     const count = Store.batchImportCards(lines, group);
     Cards.renderCards();
     Cards.refreshGroupFilter();
     hideModal('batch-modal');
-      toast(`成功导入 ${count} 张字卡${lines.length - count > 0 ? `，跳过 ${lines.length - count} 个重复` : ''}`);
+    toast(`成功导入 ${count} 张字卡${lines.length - count > 0 ? `，跳过 ${lines.length - count} 个重复` : ''}`);
+  });
+
+  function renderEditCardGroups(selectedGroup) {
+    const container = document.getElementById('edit-card-groups');
+    const groups = Store.getCardGroups();
+    let html = `<button class="group-btn${selectedGroup === '' ? ' active' : ''}" data-group="">未分组</button>`;
+    groups.forEach(g => {
+      if (!g) return;
+      html += `<button class="group-btn${selectedGroup === g ? ' active' : ''}" data-group="${Cards._escapeHtml(g)}">${Cards._escapeHtml(g)}</button>`;
     });
+    container.innerHTML = html;
+    container.querySelectorAll('.group-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        container.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  }
 
   // Card JSON export
   document.getElementById('btn-export-cards').addEventListener('click', () => {
@@ -2120,32 +2240,151 @@ function init() {
     const preview = document.getElementById('add-emoji-preview');
     const imgSrc = preview._src;
     if (!text && !imgSrc) { toast('请输入文字或选择图片'); return; }
-    if (imgSrc) {
-      Store.addEmoji(text || '图片', 'image', imgSrc);
-    } else {
-      if (Store.addEmoji(text)) {
-        toast('已添加');
+    toast('添加中...');
+    setTimeout(() => {
+      if (imgSrc) {
+        Store.addEmoji(text || '图片', 'image', imgSrc);
       } else {
-        toast('已存在相同表情');
-        return;
+        if (Store.addEmoji(text)) {
+          // ok
+        } else {
+          toast('已存在相同表情');
+          return;
+        }
       }
-    }
-    Cards.renderEmojis();
-    Cards._updateEmojiPicker();
-    hideModal('add-emoji-modal');
-    toast('表情已添加');
+      Cards.renderEmojis();
+      Cards._updateEmojiPicker();
+      hideModal('add-emoji-modal');
+      toast('添加完成');
+    }, 200);
   });
 
+  // Kaomoji (颜文字)
+  const KAOMOJI_LIST = [
+    '(◕‿◕)', '(◡‿◡)', '◕‿◕', '(✿◠‿◠)', '(⌒‿⌒)', '(｡◕‿◕｡)',
+    '(≧◡≦)', '(人◕‿◕)', '(◕‿◕)♡', '(◠‿◠✿)', 'ヽ(✿ﾟ▽ﾟ)ノ',
+    'ヽ(◕‿◕✿)ﾉ', '(◠﹏◠✿)', '(◕‿◕✿)', '☜(✿◕‿◕)☞',
+    '｡^‿^｡', '(◕‿◕)~♪', '♪(◕‿◕)ﾉ', '(◕‿◕)ﾉ', '＾▽＾',
+    '(＾▽＾)', '(＾◡＾)', '(＾▿＾)', '〜(＾▽＾〜)', '(〜＾▽＾)〜',
+    '(*^▽^*)', '(^ω^)', '(´▽`ʃ♡ƪ)', '˘▾˘', '(•ө•)♡',
+    '♡(◕‿◕)', '(｡♡‿♡｡)', '(♡ω♡)', '♡(ᵔᴗᵔ)♡', '♡(◕ᴗ◕✿)',
+    '♥(✿ฺ◕‿◕)', '♡～(^▽^～)', '(◕‿◕)♡〜', 'ヽ(♡‿♡)ノ',
+    '(╥﹏╥)', '(｡•́︿•̀｡)', '(っ◞‸◟c)', '(⋟﹏⋞)', '(◞‸◟)',
+    '(╯︵╰,)', '(＃`Д´)', '(╬ Ò﹏Ó)', '(＃￣ω￣)', '(｀▽′)',
+    '(￣ω￣;)', '(；￣Д￣)', '(°д°)', '(ºДº)', '(°ロ°)',
+    '(°▽°)', '(￣▽￣)ノ', '(￣▽￣*)ゞ', 'ヽ(￣▽￣)ノ',
+    '(っ˘ω˘ς)', '…(⊙_⊙;)…', 'Σ(°△°)', '∑(✘Д✘)',
+    '(°_°)', '(¬‿¬)', '(￢_￢)', '(─‿─)', 'ᕙ(▀̿̿Ĺ̯̿̿▀̿)ᕗ',
+    'ᕦ(ò_óˇ)ᕤ', '~(˘▾˘~)', '(~˘▾˘)~', '〜(꒪꒳꒪)〜',
+    '¯\\_(ツ)_/¯', '(◔_◔)', 'ಠ_ಠ', '(◕‿◕)──☆'
+  ];
+
+  function getKaomoji() { return Store._get('kaomoji') || [...KAOMOJI_LIST]; }
+  function saveKaomoji(list) { Store._set('kaomoji', list); }
+
+  function renderKaomoji() {
+    const container = document.getElementById('kaomoji-list');
+    const list = getKaomoji();
+    if (!list.length) {
+      container.innerHTML = '<p class="hint-text" style="text-align:center;padding:20px;">暂无颜文字</p>';
+      return;
+    }
+    container.innerHTML = list.map(k =>
+      `<span class="emoji-item kaomoji-item" data-text="${Cards._escapeHtml(k)}" style="font-size:15px;padding:6px 10px;white-space:nowrap;">${Cards._escapeHtml(k)}</span>`
+    ).join('');
+    container.querySelectorAll('.kaomoji-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const input = document.getElementById('chat-input');
+        const text = el.dataset.text;
+        input.value += text;
+        input.focus();
+        Chat.scrollToBottom();
+        toast('已添加到输入框');
+      });
+    });
+  }
+
+  // Initialize kaomoji storage if empty
+  if (!Store._get('kaomoji')) saveKaomoji([...KAOMOJI_LIST]);
+
+  document.getElementById('btn-add-kaomoji').addEventListener('click', () => {
+    const text = prompt('输入颜文字：');
+    if (!text) return;
+    const list = getKaomoji();
+    if (list.includes(text)) { toast('已存在'); return; }
+    list.push(text);
+    saveKaomoji(list);
+    renderKaomoji();
+    toast('已添加');
+  });
+
+  // Render kaomoji on page load (called in init)
+  renderKaomoji();
+
   // Write letter
+  let _replyToLetterId = null;
+  let _editLetterId = null;
+
   document.getElementById('btn-write-letter').addEventListener('click', () => {
+    _replyToLetterId = null;
+    _editLetterId = null;
     document.getElementById('letter-content-input').value = '';
+    document.getElementById('write-letter-original').classList.add('hidden');
     const name = Store.getSettings().characterName;
     document.getElementById('write-letter-recipient').textContent = name;
+    document.getElementById('send-letter-confirm').textContent = '寄出信件';
     showModal('write-letter-modal');
   });
+
+  document.getElementById('letter-btn-reply').addEventListener('click', () => {
+    const replyToId = Number(document.getElementById('letter-btn-reply').dataset.replyToId);
+    _replyToLetterId = replyToId;
+    _editLetterId = null;
+    document.getElementById('letter-content-input').value = '';
+    const origLetter = Store.getLetters().find(l => l.id === replyToId);
+    if (origLetter) {
+      document.getElementById('write-letter-original-body').textContent = origLetter.content;
+      document.getElementById('write-letter-original').classList.remove('hidden');
+    }
+    const name = Store.getSettings().characterName;
+    document.getElementById('write-letter-recipient').textContent = name;
+    document.getElementById('send-letter-confirm').textContent = '寄出回复';
+    hideModal('letter-detail-modal');
+    showModal('write-letter-modal');
+  });
+
+  document.getElementById('letter-btn-edit').addEventListener('click', () => {
+    const editId = Number(document.getElementById('letter-btn-edit').dataset.editId);
+    _editLetterId = editId;
+    _replyToLetterId = null;
+    const letter = Store.getLetters().find(l => l.id === editId);
+    if (!letter) return;
+    document.getElementById('letter-content-input').value = letter.content;
+    if (letter.replyToId) {
+      const origLetter = Store.getLetters().find(l => l.id === letter.replyToId);
+      if (origLetter) {
+        document.getElementById('write-letter-original-body').textContent = origLetter.content;
+        document.getElementById('write-letter-original').classList.remove('hidden');
+      }
+    }
+    const name = Store.getSettings().characterName;
+    document.getElementById('write-letter-recipient').textContent = name;
+    document.getElementById('send-letter-confirm').textContent = '保存修改';
+    hideModal('letter-detail-modal');
+    showModal('write-letter-modal');
+  });
+
   document.getElementById('send-letter-confirm').addEventListener('click', () => {
     const content = document.getElementById('letter-content-input').value;
-    Letters.sendLetter(content);
+    if (_editLetterId) {
+      Letters.editLetter(_editLetterId, content);
+    } else if (_replyToLetterId) {
+      Letters.sendLetter(content, _replyToLetterId);
+    } else {
+      Letters.sendLetter(content);
+    }
+    _replyToLetterId = null;
+    _editLetterId = null;
     hideModal('write-letter-modal');
   });
 
@@ -2206,54 +2445,21 @@ function init() {
   let _calYear = new Date().getFullYear();
 
   function openMoodJournal() {
-    const emojiContainer = document.getElementById('mood-emoji-picker');
-    const emojis = Store.getEmojis();
-    emojiContainer.innerHTML = emojis.map(e => {
-      const inner = e.type === 'image' && e.src
-        ? `<img class="emoji-img-sm" src="${e.src}" alt="${e.text}">`
-        : `<span>${e.text}</span>`;
-      return `<div class="emoji-item" data-id="${e.id}">${inner}</div>`;
-    }).join('');
-    const today = Store.getTodayMood();
-    if (today) {
-      document.getElementById('mood-status-text').textContent = today.status || '(无状态)';
+    const todayEntry = Store.getTodayMood();
+    const todayEl = document.getElementById('mood-today-emoji');
+    const statusEl = document.getElementById('mood-today-status');
+    if (todayEntry) {
+      const e = Store.getEmojis().find(em => em.id === Number(todayEntry.mood));
+      todayEl.textContent = e ? (e.type === 'image' && e.src ? '🖼️' : e.text) : '💭';
+      statusEl.textContent = todayEntry.status || '';
     } else {
-      document.getElementById('mood-status-text').textContent = '点击下方表情选择今日心情…';
+      todayEl.textContent = '💭';
+      statusEl.textContent = '今日无记录';
     }
     _calMonth = new Date().getMonth();
     _calYear = new Date().getFullYear();
     renderMoodCalendar();
-    renderMoodHistory();
     showModal('mood-modal');
-
-    // Select mood emoji
-    emojiContainer.querySelectorAll('.emoji-item').forEach(el => {
-      el.addEventListener('click', () => {
-        emojiContainer.querySelectorAll('.emoji-item').forEach(e => e.style.borderColor = 'var(--border)');
-        el.style.borderColor = 'var(--primary)';
-        el._selected = true;
-        const id = Number(el.dataset.id);
-        const charName = Store.getSettings().characterName;
-        const atm = Store.getAtmospheres();
-        const atmText = atm.length ? atm[rand(0, atm.length-1)].text : '';
-        const statusParts = [];
-        const cards = Store.getCards();
-        if (cards.length) {
-          const count = rand(1, Math.min(3, cards.length));
-          const used = new Set();
-          while (statusParts.length < count) {
-            const c = cards[rand(0, cards.length-1)];
-            if (used.has(c.id)) continue;
-            used.add(c.id);
-            statusParts.push(c.text);
-          }
-        }
-        let status = statusParts.join('、');
-        if (atmText) status = status ? `${status} · ${atmText}` : atmText;
-        document.getElementById('mood-status-text').textContent = status || '(无状态)';
-        el._selectedStatus = status;
-      });
-    });
   }
 
   function renderMoodCalendar() {
@@ -2299,29 +2505,45 @@ function init() {
         const dateStr = el.dataset.date;
         const entry = moodByDate[dateStr];
         if (!entry) return;
-        const emojiObj = Store.getEmojis().find(e => e.id === Number(entry.mood));
-        const emojiText = emojiObj ? (emojiObj.type === 'image' && emojiObj.src ? '🖼️' : emojiObj.text) : '💭';
-        const elId = document.getElementById('mood-emoji-picker');
-        elId.querySelectorAll('.emoji-item').forEach(e => e.style.borderColor = 'var(--border)');
-        const targetEmoji = elId.querySelector(`[data-id="${entry.mood}"]`);
-        if (targetEmoji) targetEmoji.style.borderColor = 'var(--primary)';
-        document.getElementById('mood-status-text').textContent = entry.status || '(无状态)';
-        toast(`${emojiText} ${fmtDate(entry.timestamp)}`);
+        openMoodDayDetail(entry);
       });
     });
   }
 
-  document.getElementById('btn-save-mood').addEventListener('click', () => {
-    const selected = document.querySelector('#mood-emoji-picker .emoji-item[style*="var(--primary)"]');
-    if (!selected) { toast('请选择一个心情表情'); return; }
-    const moodId = selected.dataset.id;
-    const status = document.getElementById('mood-status-text').textContent;
-    Store.addMood(moodId, status);
-    Settings._updateHeader();
-    renderMoodCalendar();
-    renderMoodHistory();
-    hideModal('mood-modal');
-    toast('心情已记录');
+  function openMoodDayDetail(entry) {
+    const e = Store.getEmojis().find(em => em.id === Number(entry.mood));
+    const emojiText = e ? (e.type === 'image' && e.src ? '🖼️' : e.text) : '💭';
+    document.getElementById('mood-day-emoji').textContent = emojiText;
+    document.getElementById('mood-day-title').textContent = `📖 ${fmtDate(entry.timestamp)}`;
+    const charName = Store.getSettings().characterName;
+    const statusPhrase = Store.getRandomStatusPhrase();
+    const statusText = statusPhrase ? statusPhrase.replace('{char}', charName).replace('{user}', Store.getSettings().userName) : '';
+    document.getElementById('mood-day-status').textContent = statusText || `${charName} 今天心情不错`;
+    const cards = Store.getCards();
+    let boardHtml = '';
+    if (cards.length) {
+      const count = rand(1, Math.min(3, cards.length));
+      const used = new Set();
+      const picked = [];
+      while (picked.length < count) {
+        const c = cards[rand(0, cards.length-1)];
+        if (used.has(c.id)) continue;
+        used.add(c.id);
+        picked.push(c.text);
+      }
+      boardHtml = picked.map(t => `· ${t}`).join('<br>');
+    } else {
+      boardHtml = '暂无内容';
+    }
+    document.getElementById('mood-day-board').innerHTML = boardHtml;
+    const isToday = new Date(entry.timestamp).toDateString() === new Date().toDateString();
+    document.querySelector('#mood-day-modal .mood-day-close').textContent = isToday ? '知道了，开始今天' : '知道了';
+    showModal('mood-day-modal');
+  }
+
+  // Close day detail
+  document.querySelector('#mood-day-modal .mood-day-close').addEventListener('click', () => {
+    hideModal('mood-day-modal');
   });
 
   // Calendar navigation
@@ -2336,22 +2558,25 @@ function init() {
     renderMoodCalendar();
   });
 
-  function renderMoodHistory() {
-    const container = document.getElementById('mood-history-list');
-    const moods = Store.getMoods();
-    if (!moods.length) {
-      container.innerHTML = '<p class="hint-text">暂无心情记录</p>';
-      return;
-    }
-    container.innerHTML = moods.slice().reverse().slice(0, 30).map(m => {
-      const e = Store.getEmojis().find(em => em.id === Number(m.mood));
-      const emojiText = e ? (e.type === 'image' && e.src ? '🖼️' : e.text) : '💭';
-      return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;">
-        <span>${emojiText} ${m.status || ''}</span>
-        <span style="color:var(--text-secondary);font-size:12px;">${fmtDate(m.timestamp)}</span>
-      </div>`;
-    }).join('');
+  function showLetterNotification(letter, isReply) {
+    const charName = Store.getSettings().characterName;
+    document.getElementById('letter-notif-title').textContent = isReply ? `${charName} 回复了你的信` : `💌 ${charName} 寄来了一封信`;
+    document.getElementById('letter-notif-preview').textContent = letter.content.slice(0, 100) + (letter.content.length > 100 ? '...' : '');
+    document.getElementById('letter-notif-now').dataset.letterId = letter.id;
+    showModal('letter-notification');
   }
+
+  document.getElementById('letter-notif-now').addEventListener('click', () => {
+    const id = Number(document.getElementById('letter-notif-now').dataset.letterId);
+    hideModal('letter-notification');
+    Letters.showLetter(id);
+    Letters.render();
+  });
+
+  document.getElementById('letter-notif-later').addEventListener('click', () => {
+    hideModal('letter-notification');
+    Letters.render();
+  });
 
   // Favorites
   document.getElementById('btn-favorites').addEventListener('click', () => {
@@ -2403,7 +2628,9 @@ function init() {
         callSeconds++;
         const m = String(Math.floor(callSeconds / 60)).padStart(2, '0');
         const sec = String(callSeconds % 60).padStart(2, '0');
-        document.getElementById('call-timer').textContent = `${m}:${sec}`;
+        const timeStr = `${m}:${sec}`;
+        document.getElementById('call-timer').textContent = timeStr;
+        document.getElementById('bubble-timer').textContent = timeStr;
       }, 1000);
     }, 2000);
   }
@@ -2412,6 +2639,7 @@ function init() {
     callActive = false;
     if (callTimer) clearInterval(callTimer);
     callTimer = null;
+    hideCallBubble();
     hideModal('call-modal');
   }
 
@@ -2476,8 +2704,72 @@ function init() {
   });
   document.getElementById('call-btn-minimize').addEventListener('click', () => {
     hideModal('call-modal');
-    toast('通话已最小化');
+    showCallBubble();
   });
+
+  function showCallBubble() {
+    const s = Store.getSettings();
+    const bubble = document.getElementById('call-bubble');
+    bubble.classList.remove('hidden');
+    Settings._setAvatar('bubble-avatar', s.characterAvatar);
+    document.getElementById('bubble-name').textContent = s.characterName;
+    bubble.dataset.minimized = 'true';
+  }
+
+  function hideCallBubble() {
+    document.getElementById('call-bubble').classList.add('hidden');
+  }
+
+  // Click bubble to expand
+  document.getElementById('call-bubble').addEventListener('click', (e) => {
+    if (e.target.closest('.bubble-hangup')) return;
+    hideCallBubble();
+    showModal('call-modal');
+  });
+
+  // Hangup from bubble
+  document.getElementById('bubble-hangup').addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideCallBubble();
+    endCall();
+  });
+
+  // Drag bubble
+  (function() {
+    const bubble = document.getElementById('call-bubble');
+    let isDragging = false, startX, startY, offsetX = 0, offsetY = 0;
+    bubble.addEventListener('mousedown', (e) => {
+      if (e.target.closest('.bubble-hangup')) return;
+      isDragging = true;
+      startX = e.clientX - offsetX;
+      startY = e.clientY - offsetY;
+      bubble.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      offsetX = e.clientX - startX;
+      offsetY = e.clientY - startY;
+      bubble.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    });
+    document.addEventListener('mouseup', () => { isDragging = false; bubble.style.cursor = 'grab'; });
+    // Touch support
+    bubble.addEventListener('touchstart', (e) => {
+      if (e.target.closest('.bubble-hangup')) return;
+      const t = e.touches[0];
+      isDragging = true;
+      startX = t.clientX - offsetX;
+      startY = t.clientY - offsetY;
+    }, { passive: true });
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const t = e.touches[0];
+      offsetX = t.clientX - startX;
+      offsetY = t.clientY - startY;
+      bubble.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+    }, { passive: true });
+    document.addEventListener('touchend', () => { isDragging = false; });
+  })();
   document.getElementById('call-btn-zoom-in').addEventListener('click', () => {
     callScale = Math.min(callScale + 0.2, 2);
     document.getElementById('call-content').style.transform = `scale(${callScale})`;
@@ -2619,11 +2911,13 @@ function init() {
     Settings._updateHeader();
   }, 3600000);
 
-  // Auto-generate moods for recent days (today + past 7 days if missing)
+  // Auto-generate moods only for days with chat messages
   function generateMoodForDate(date) {
     const dateStr = date.toDateString();
     const existing = Store.getMoods().find(m => m.date === dateStr);
     if (existing) return null;
+    const msgs = Store.getMessages().filter(m => new Date(m.timestamp).toDateString() === dateStr);
+    if (!msgs.length) return null; // only generate for chat days
     const emojis = Store.getEmojis();
     const cards = Store.getCards();
     if (!emojis.length) return null;
@@ -2639,12 +2933,7 @@ function init() {
         statusParts.push(c.text);
       }
     }
-    const atm = Store.getAtmospheres();
     let status = statusParts.join('、');
-    if (atm.length) {
-      const atmText = pickRandom(atm).text.replace('{char}', Store.getSettings().characterName).replace('{user}', '你');
-      status = status ? `${status} · ${atmText}` : atmText;
-    }
     Store.addMood(String(moodEmoji.id), status, date);
   }
 
@@ -2654,6 +2943,46 @@ function init() {
     d.setDate(d.getDate() + i);
     generateMoodForDate(d);
   }
+
+  // New day popup - show on page load if today has mood
+  setTimeout(() => {
+    const todayEntry = Store.getTodayMood();
+    if (todayEntry) {
+      showNewDayPopup(todayEntry);
+    }
+  }, 1500);
+
+  function showNewDayPopup(entry) {
+    const e = Store.getEmojis().find(em => em.id === Number(entry.mood));
+    const emojiText = e ? (e.type === 'image' && e.src ? '🖼️' : e.text) : '💭';
+    document.getElementById('new-day-emoji').textContent = emojiText;
+    const charName = Store.getSettings().characterName;
+    const statusPhrase = Store.getRandomStatusPhrase();
+    const statusText = statusPhrase ? statusPhrase.replace('{char}', charName).replace('{user}', Store.getSettings().userName) : '';
+    document.getElementById('new-day-status').textContent = statusText || '';
+    const cards = Store.getCards();
+    let boardHtml = '';
+    if (cards.length) {
+      const count = rand(1, Math.min(3, cards.length));
+      const used = new Set();
+      const picked = [];
+      while (picked.length < count) {
+        const c = cards[rand(0, cards.length-1)];
+        if (used.has(c.id)) continue;
+        used.add(c.id);
+        picked.push(c.text);
+      }
+      boardHtml = picked.map(t => `· ${t}`).join('<br>');
+    } else {
+      boardHtml = '暂无内容';
+    }
+    document.getElementById('new-day-board').innerHTML = boardHtml;
+    showModal('new-day-modal');
+  }
+
+  document.getElementById('new-day-close').addEventListener('click', () => {
+    hideModal('new-day-modal');
+  });
 
   // Auto-reply improvement: natural timing
   // Override scheduleReply to be more natural
@@ -2743,10 +3072,10 @@ Letters._ensureProactiveLetters = function() {
       content += r.text;
       if (i < sentenceCount - 1 && Math.random() > 0.5) content += '。';
     }
-    Store.addLetter('character', content, null);
+    const letter = Store.addLetter('character', content, null);
     Store._set('lastProactiveLetter', Date.now());
     Letters.render();
-    toast(`💌 ${s.characterName} 寄来了一封信`);
+    showLetterNotification(letter, false);
   }
 };
 Letters._ensureProactiveLetters();

@@ -25,6 +25,7 @@
         <div id="header-menu-wrap">
           <button data-icon-key="menu" id="btn-menu" class="icon-btn" title="更多">☰</button>
           <div id="header-dropdown" class="dropdown-menu hidden">
+            <button data-action="chat" class="dropdown-item">💬 对话</button>
             <button data-action="cards" class="dropdown-item">🃏 字卡</button>
             <button data-action="letters" class="dropdown-item">✉️ 信件</button>
             <button data-action="settings" class="dropdown-item">⚙️ 设置</button>
@@ -89,6 +90,7 @@
         <div class="view-tabs">
           <button class="view-tab active" data-tab="cards-tab-cards">字卡库</button>
           <button class="view-tab" data-tab="cards-tab-emojis">表情包</button>
+          <button class="view-tab" data-tab="cards-tab-kaomoji">颜文字</button>
         </div>
 
         <div id="cards-tab-cards" class="tab-content active">
@@ -131,6 +133,13 @@
             <button id="btn-emoji-batch-exit" class="btn-small">退出批量</button>
           </div>
           <div id="emoji-list" class="emoji-grid"></div>
+        </div>
+
+        <div id="cards-tab-kaomoji" class="tab-content">
+          <div class="tab-actions">
+            <button id="btn-add-kaomoji" class="btn-primary">+ 添加颜文字</button>
+          </div>
+          <div id="kaomoji-list" class="emoji-grid" style="padding:8px 0;"></div>
         </div>
 
       </div>
@@ -195,12 +204,13 @@
             </div>
           </div>
           <div class="settings-row">
-            <label>自动消息</label>
+            <label>主动消息</label>
             <label class="switch">
               <input type="checkbox" id="settings-auto-msg">
               <span class="switch-slider"></span>
             </label>
           </div>
+          <p class="hint-text">即使你没发消息，角色也会主动找你聊天（按间隔定时发送）</p>
           <div class="settings-row" id="settings-auto-interval-row">
             <label>自动间隔</label>
             <div class="slider-group">
@@ -218,7 +228,7 @@
               <span class="switch-slider"></span>
             </label>
           </div>
-          <p class="hint-text">关闭后对方不会主动回复消息（但自动消息和信件仍会发送）</p>
+          <p class="hint-text">你发消息后，角色自动回复你（响应式，依赖你主动触发）</p>
         </div>
         <div class="settings-section">
           <h3>主动写信</h3>
@@ -413,7 +423,10 @@
           <button class="modal-close">&times;</button>
         </div>
         <textarea id="add-card-input" class="modal-textarea" placeholder="输入字卡内容..." rows="3"></textarea>
-        <input type="text" id="add-card-group-input" class="modal-input" placeholder="分组（可选）" maxlength="30" style="margin-top:6px;">
+        <div style="margin-top:8px;">
+          <label style="font-size:13px;color:var(--text-secondary);">选择分组</label>
+          <div id="add-card-groups" class="group-selector" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;"></div>
+        </div>
         <button id="add-card-confirm" class="btn-primary modal-btn">确认添加</button>
       </div>
     </div>
@@ -427,7 +440,10 @@
           <button class="modal-close">&times;</button>
         </div>
         <textarea id="edit-card-input" class="modal-textarea" rows="3"></textarea>
-        <input type="text" id="edit-card-group-input" class="modal-input" placeholder="分组（可选）" maxlength="30" style="margin-top:6px;">
+        <div style="margin-top:8px;">
+          <label style="font-size:13px;color:var(--text-secondary);">选择分组</label>
+          <div id="edit-card-groups" class="group-selector" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;"></div>
+        </div>
         <button id="edit-card-confirm" class="btn-primary modal-btn">保存</button>
       </div>
     </div>
@@ -442,7 +458,10 @@
         </div>
         <p class="hint-text">每行一条，系统将自动去重</p>
         <textarea id="batch-input" class="modal-textarea" placeholder="每行一条字卡内容..." rows="8"></textarea>
-        <input type="text" id="batch-group-input" class="modal-input" placeholder="分组（可选）" maxlength="30" style="margin-top:6px;">
+        <div style="margin-top:8px;">
+          <label style="font-size:13px;color:var(--text-secondary);">选择分组</label>
+          <div id="batch-groups" class="group-selector" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0;"></div>
+        </div>
         <button id="batch-confirm" class="btn-primary modal-btn">导入</button>
       </div>
     </div>
@@ -490,6 +509,10 @@
           <span>写信给 <span id="write-letter-recipient">梦角</span></span>
           <button class="modal-close">&times;</button>
         </div>
+        <div id="write-letter-original" class="hidden" style="background:var(--bg);padding:8px 12px;border-radius:8px;margin-bottom:8px;font-size:13px;color:var(--text-secondary);">
+          <div style="font-weight:600;margin-bottom:4px;">原信：</div>
+          <div id="write-letter-original-body" style="white-space:pre-wrap;"></div>
+        </div>
         <textarea id="letter-content-input" class="modal-textarea" placeholder="写下你想说的话..." rows="12"></textarea>
         <button id="send-letter-confirm" class="btn-primary modal-btn">寄出信件</button>
       </div>
@@ -507,6 +530,7 @@
           <div class="letter-meta">
             <span id="letter-detail-sender"></span>
             <span id="letter-detail-time"></span>
+            <span id="letter-detail-status" class="letter-status" style="margin-left:auto;"></span>
           </div>
           <div id="letter-detail-body" class="letter-body"></div>
         </div>
@@ -516,7 +540,26 @@
           <div id="letter-detail-reply-body" class="letter-body"></div>
           <div class="letter-meta">
             <span id="letter-detail-reply-time"></span>
+            <span id="letter-detail-reply-status" class="letter-status" style="margin-left:auto;"></span>
           </div>
+        </div>
+        <div id="letter-detail-actions" class="hidden" style="padding:12px 0 0;display:flex;gap:8px;">
+          <button id="letter-btn-reply" class="btn-secondary" style="flex:1;">回复</button>
+          <button id="letter-btn-edit" class="btn-secondary hidden" style="flex:1;">修改回复</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Letter Notification Popup -->
+    <div id="letter-notification" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:340px;text-align:center;">
+        <div style="font-size:36px;margin-bottom:8px;">💌</div>
+        <div id="letter-notif-title" style="font-weight:600;font-size:16px;margin-bottom:4px;"></div>
+        <div id="letter-notif-preview" style="font-size:13px;color:var(--text-secondary);margin-bottom:16px;white-space:pre-wrap;max-height:80px;overflow:hidden;"></div>
+        <div style="display:flex;gap:8px;">
+          <button id="letter-notif-later" class="btn-secondary" style="flex:1;">稍后再看</button>
+          <button id="letter-notif-now" class="btn-primary" style="flex:1;">立即查看</button>
         </div>
       </div>
     </div>
@@ -544,6 +587,16 @@
       </div>
     </div>
 
+    <!-- Call Bubble (minimized) -->
+    <div id="call-bubble" class="call-bubble hidden">
+      <span id="bubble-avatar" class="bubble-avatar"></span>
+      <div class="bubble-info">
+        <span id="bubble-name" class="bubble-name"></span>
+        <span id="bubble-timer" class="bubble-timer">00:00</span>
+      </div>
+      <button id="bubble-hangup" class="bubble-hangup" title="挂断">📞</button>
+    </div>
+
     <!-- Mood Journal Modal -->
     <div id="mood-modal" class="modal hidden">
       <div class="modal-backdrop"></div>
@@ -553,12 +606,10 @@
           <button class="modal-close">&times;</button>
         </div>
         <div id="mood-current">
-          <p class="hint-text">梦角的今日心情</p>
-          <div id="mood-emoji-picker" class="emoji-grid" style="max-height:200px;overflow-y:auto;"></div>
-          <div style="margin:12px 0;font-size:13px;color:var(--text-secondary);">状态描述：</div>
-          <div id="mood-status-text" style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:14px;margin-bottom:12px;"></div>
-          <button id="btn-save-mood" class="btn-primary modal-btn">记录今日心情</button>
-          <hr style="margin:16px 0;border-color:var(--border);">
+          <div id="mood-today-display" style="text-align:center;padding:8px 0 12px;">
+            <div id="mood-today-emoji" style="font-size:40px;margin-bottom:4px;"></div>
+            <div id="mood-today-status" style="font-size:14px;color:var(--text-secondary);"></div>
+          </div>
         </div>
         <div id="mood-calendar-wrap" style="margin-bottom:12px;">
           <div id="mood-calendar-nav" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -568,10 +619,41 @@
           </div>
           <div id="mood-calendar" class="mood-calendar"></div>
         </div>
-        <div id="mood-history">
-          <h4 style="font-size:13px;color:var(--text-secondary);margin-bottom:8px;">详细记录</h4>
-          <div id="mood-history-list"></div>
+      </div>
+    </div>
+
+    <!-- Mood Day Detail Modal -->
+    <div id="mood-day-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <span id="mood-day-title">心情详情</span>
+          <button class="modal-close">&times;</button>
         </div>
+        <div id="mood-day-content" style="text-align:center;padding:12px 0;">
+          <div id="mood-day-emoji" style="font-size:48px;margin-bottom:8px;"></div>
+          <div id="mood-day-status" style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;"></div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">留言板</div>
+          <div id="mood-day-board" style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:14px;line-height:1.8;text-align:left;"></div>
+        </div>
+        <button class="btn-primary modal-btn mood-day-close">知道了，开始今天</button>
+      </div>
+    </div>
+
+    <!-- New Day Popup -->
+    <div id="new-day-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <span>🌅 新的一天</span>
+        </div>
+        <div style="text-align:center;padding:12px 0;">
+          <div id="new-day-emoji" style="font-size:48px;margin-bottom:8px;"></div>
+          <div id="new-day-status" style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;"></div>
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:4px;">留言板</div>
+          <div id="new-day-board" style="padding:8px 12px;background:var(--bg);border-radius:8px;font-size:14px;line-height:1.8;text-align:left;"></div>
+        </div>
+        <button id="new-day-close" class="btn-primary modal-btn">知道了，开始今天</button>
       </div>
     </div>
 
