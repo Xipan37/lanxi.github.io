@@ -1190,7 +1190,7 @@ html, body {
 }
 
 /* Call bubble (minimized) */
-.call-bubble {
+.call-bubble.hidden { display: none; }
   position: fixed;
   bottom: 80px;
   right: 16px;
