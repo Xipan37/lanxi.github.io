@@ -1,0 +1,199 @@
+const Store = (function () {
+  const KEY = "mengjiao.letter.v1";
+  let state = null;
+
+  function defaultGroups() {
+    return [
+      { id: "none", name: "未分组" },
+      { id: "g_say", name: "日常碎碎念" },
+      { id: "g_night", name: "晚安系列" },
+      { id: "g_miss", name: "想你系列" }
+    ];
+  }
+
+  function toCard(text, group) {
+    return { text: String(text), group: group || "none" };
+  }
+
+  function defaults() {
+    return {
+      version: 2,
+      user: { name: "我", avatar: "", emoji: "🌸" },
+      peer: { name: "梦角", avatar: "", emoji: "🌙" },
+      groups: defaultGroups(),
+      cards: DATA.DEFAULT_CARDS.map(t => toCard(t, "none")),
+      atmosphere: DATA.DEFAULT_ATMOSPHERE.slice(),
+      emojis: cloneEmojis(DATA.EMOJI_GROUPS),
+      customStickers: [],
+      images: [],
+      messages: [],
+      letters: [],
+      mood: { emoji: "🌙", status: ["在发呆，等你"], ts: Date.now() },
+      moodLog: [],
+      dayFlags: {},
+      timers: {},
+      callPos: null,
+      settings: {
+        replyMin: 3,
+        replyMax: 300,
+        replyChance: 0.75,
+        combine: false,
+        combineMin: 1,
+        combineMax: 3,
+        patChance: 0.12,
+        stickerChance: 0.14,
+        proactiveOn: true,
+        proactiveMin: 1,
+        proactiveMax: 15,
+        proactiveChance: 0.6,
+        callOn: true,
+        callMin: 3,
+        callMax: 20,
+        callChance: 0.45,
+        aiAnswerChance: 0.7,
+        callType: "voice",
+        letterReplyMin: 1,
+        letterReplyMax: 720,
+        letterOn: true,
+        letterMin: 60,
+        letterMax: 1440,
+        letterChance: 0.6,
+        letterSentMin: 1,
+        letterSentMax: 30,
+        moodHours: 1,
+        moodChange: 0.7,
+        opening: true,
+        openingStyle: "orb",
+        openingGlow: "#e79bb4",
+        openingBg: "#241a26",
+        openingText: "#f6e9ee",
+        openingStar: "#ffffff",
+        openingDot: "#f0a6c0",
+        openingStars: 46,
+        openingSky: true,
+        theme: "sky",
+        primary: "#3f8cff",
+        myBubble: "#3f8cff",
+        aiBubble: "#ffffff",
+        bubbleStyle: "round",
+        chatColor: "#f2f5fa",
+        chatImage: "",
+        fontSize: 16,
+        font: "system",
+        timeStyle: "time",
+        showUserAvatar: true,
+        favicon: "moon"
+      }
+    };
+  }
+
+  function cloneEmojis(src) {
+    const out = {};
+    Object.keys(src).forEach(function (k) {
+      out[k] = src[k].slice();
+    });
+    return out;
+  }
+
+  function normalizeCards(cards) {
+    if (!Array.isArray(cards) || !cards.length) return DATA.DEFAULT_CARDS.map(t => toCard(t, "none"));
+    return cards
+      .map(c => {
+        if (typeof c === "string") return toCard(c, "none");
+        if (c && typeof c.text === "string" && c.text.trim()) return { text: c.text.trim(), group: c.group || "none" };
+        return null;
+      })
+      .filter(Boolean);
+  }
+
+  function load() {
+    let saved = null;
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch (e) {
+      saved = null;
+    }
+    const base = defaults();
+    if (!saved || typeof saved !== "object") return base;
+    const merged = Object.assign({}, base, saved);
+    merged.user = Object.assign({}, base.user, saved.user || {});
+    merged.peer = Object.assign({}, base.peer, saved.peer || {});
+    merged.user.emoji = merged.user.emoji || base.user.emoji;
+    merged.peer.emoji = merged.peer.emoji || base.peer.emoji;
+    merged.settings = Object.assign({}, base.settings, saved.settings || {});
+    merged.timers = saved.timers && typeof saved.timers === "object" ? saved.timers : {};
+    merged.cards = normalizeCards(saved.cards);
+    if (!Array.isArray(merged.groups) || !merged.groups.length) merged.groups = base.groups;
+    if (!merged.groups.some(g => g.id === "none")) merged.groups.unshift({ id: "none", name: "未分组" });
+    if (!Array.isArray(merged.atmosphere)) merged.atmosphere = base.atmosphere;
+    if (!Array.isArray(merged.messages)) merged.messages = [];
+    if (!Array.isArray(merged.letters)) merged.letters = [];
+    if (!Array.isArray(merged.moodLog)) merged.moodLog = [];
+    if (!Array.isArray(merged.customStickers)) merged.customStickers = [];
+    if (!Array.isArray(merged.images)) merged.images = [];
+    if (!merged.emojis || typeof merged.emojis !== "object" || !Object.keys(merged.emojis).length) {
+      merged.emojis = cloneEmojis(DATA.EMOJI_GROUPS);
+    }
+    if (!merged.emojis["颜表情"]) merged.emojis["颜表情"] = DATA.EMOJI_GROUPS["颜表情"].slice();
+    if (!merged.mood || typeof merged.mood !== "object") merged.mood = base.mood;
+    if (!merged.dayFlags || typeof merged.dayFlags !== "object") merged.dayFlags = {};
+    return merged;
+  }
+
+  function save() {
+    try {
+      if (state.messages.length > 800) state.messages = state.messages.slice(-800);
+      localStorage.setItem(KEY, JSON.stringify(state));
+      return true;
+    } catch (e) {
+      console.warn("保存失败", e);
+      return false;
+    }
+  }
+
+  state = load();
+
+  return {
+    get: function () {
+      return state;
+    },
+    save: save,
+    clear: function () {
+      localStorage.removeItem(KEY);
+    },
+    reload: function () {
+      state = load();
+      return state;
+    },
+    resetAll: function () {
+      localStorage.removeItem(KEY);
+      state = defaults();
+      return state;
+    },
+    resetSettingDefaults: function (keep) {
+      const base = defaults();
+      if (keep) {
+        const patch = {};
+        Object.keys(keep).forEach(function (k) {
+          patch[k] = keep[k];
+        });
+        return Object.assign(base.settings, patch);
+      }
+      return base.settings;
+    },
+    defaultState: defaults,
+    defaultCards: function () {
+      return DATA.DEFAULT_CARDS.map(t => toCard(t, "none"));
+    },
+    defaultAtmosphere: function () {
+      return DATA.DEFAULT_ATMOSPHERE.slice();
+    },
+    defaultEmojis: function () {
+      return cloneEmojis(DATA.EMOJI_GROUPS);
+    },
+    cardText: function (c) {
+      return typeof c === "string" ? c : c.text;
+    }
+  };
+})();
