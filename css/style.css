@@ -287,7 +287,15 @@ input[type=text],input[type=number],input[type=search],input[type=password],text
 }
 input:focus,textarea:focus,select:focus{border-color:var(--primary)}
 textarea{resize:vertical;min-height:110px;line-height:1.6}
-input[type=range]{width:100%;accent-color:var(--primary)}
+input[type=range]{width:100%;accent-color:var(--primary);flex:1;min-width:0}
+.stepper{display:flex;align-items:center;gap:9px}
+.stepper .stp{
+  width:32px;height:32px;flex:none;border-radius:50%;background:var(--chat);border:1px solid var(--border);
+  color:var(--text);font-size:1.05em;line-height:1;display:flex;align-items:center;justify-content:center;
+  transition:.14s;touch-action:none;user-select:none;
+}
+.stepper .stp:hover{background:var(--primary-soft);color:var(--primary);border-color:var(--primary)}
+.stepper .stp:active{transform:scale(.88);background:var(--primary);color:#fff}
 input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--border);border-radius:9px;background:var(--panel)}
 .val{font-size:.82em;color:var(--primary);min-width:52px;text-align:right;font-variant-numeric:tabular-nums}
 .switch{position:relative;width:46px;height:26px;flex:none}

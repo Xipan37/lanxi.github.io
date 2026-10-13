@@ -895,8 +895,18 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     const fontOpts = DATA.FONTS.map(f => '<option value="' + f.id + '"' + (f.id === s.font ? " selected" : "") + ">" + f.name + "</option>").join("");
     const sw = (key, label) =>
       '<div class="row"><label>' + label + '</label><span class="switch"><input type="checkbox" data-set="' + key + '"' + (s[key] ? " checked" : "") + '><i></i></span></div>';
-    const rng = (key, label, min, max, unit) =>
-      '<div class="field"><label>' + label + ' <span class="val" data-for="' + key + '"></span></label><input type="range" data-set="' + key + '" data-unit="' + (unit || "") + '" min="' + min + '" max="' + max + '" step="1" value="' + Math.round(unit === "pct" ? s[key] * 100 : s[key]) + '"></div>';
+    function stepper(key, label, min, max, unit, step, extra) {
+      const cur = unit === "pct" ? Math.round(S()[key] * 100) : Number(S()[key]);
+      return (
+        '<div class="field"><label>' + label + ' <span class="val" data-for="' + key + '"></span></label>' +
+        '<div class="stepper">' +
+        '<button class="stp" data-stepkey="' + key + '" data-delta="-' + (step || 5) + '" aria-label="减少">−</button>' +
+        '<input type="range" data-set="' + key + '" data-unit="' + (unit || "") + '" min="' + min + '" max="' + max + '" step="1" value="' + cur + '">' +
+        '<button class="stp" data-stepkey="' + key + '" data-delta="' + (step || 5) + '" aria-label="增加">＋</button>' +
+        "</div>" + (extra || "") + "</div>"
+      );
+    }
+    const rng = (key, label, min, max, unit, extra) => stepper(key, label, min, max, unit, 5, extra);
     const num = (key, label, min, max) =>
       '<div style="flex:1;min-width:110px"><div class="note" style="margin:0 0 4px">' + label + "</div>" +
       '<input type="number" data-set="' + key + '" min="' + min + '" max="' + max + '" value="' + s[key] + '"></div>';
@@ -953,7 +963,11 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       openingStyles.map(o => '<option value="' + o[0] + '"' + (o[0] === (s.openingStyle || "orb") ? " selected" : "") + ">" + o[1] + "</option>").join("") +
       "</select></div></div>" +
       '<div class="field"><label>星星数量 <span class="val" data-for="openingStars"></span></label>' +
-      '<input type="range" data-set="openingStars" min="0" max="120" step="1" value="' + (s.openingStars != null ? s.openingStars : 46) + '"></div>' +
+      '<div class="stepper">' +
+      '<button class="stp" data-stepkey="openingStars" data-delta="-5">−</button>' +
+      '<input type="range" data-set="openingStars" min="0" max="120" step="1" value="' + (s.openingStars != null ? s.openingStars : 46) + '">' +
+      '<button class="stp" data-stepkey="openingStars" data-delta="5">＋</button>' +
+      "</div></div>" +
       '<div class="field"><label>颜色</label><div class="pair">' +
       '<span class="note" style="margin:0">光晕</span><input type="color" data-set="openingGlow" value="' + s.openingGlow + '">' +
       '<span class="note" style="margin:0">背景</span><input type="color" data-set="openingBg" value="' + s.openingBg + '">' +
@@ -1077,7 +1091,12 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       "</div>" +
       '<input type="text" data-set="chatImage" value="' + esc(s.chatImage) + '" placeholder="或粘贴图片 URL">' +
       "</div>" +
-      '<div class="field"><label>字体大小 <span class="val" data-for="fontSize"></span></label><input type="range" data-set="fontSize" min="12" max="24" step="1" value="' + s.fontSize + '"></div>' +
+      '<div class="field"><label>字体大小 <span class="val" data-for="fontSize"></span></label>' +
+      '<div class="stepper">' +
+      '<button class="stp" data-stepkey="fontSize" data-delta="-1">−</button>' +
+      '<input type="range" data-set="fontSize" min="12" max="24" step="1" value="' + s.fontSize + '">' +
+      '<button class="stp" data-stepkey="fontSize" data-delta="1">＋</button>' +
+      "</div></div>" +
       '<div class="field"><label>字体</label><select data-set="font">' + fontOpts + "</select></div>" +
       '<div class="field"><label>时间戳样式</label><div class="grow">' + timeStyleSelect() + "</div>" +
       '<div class="note">时间戳显示在气泡下方。</div></div>' +
@@ -1200,6 +1219,44 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       renderEmojiMgr();
       renderStickerMgr();
     }
+    bindSteppers();
+  }
+
+  let stepTimer = null;
+  let stepDelay = null;
+
+  function stepOnce(btn) {
+    const key = btn.dataset.stepkey;
+    const input = $('#modalBody [data-set="' + key + '"]');
+    if (!input) return;
+    const delta = Number(btn.dataset.delta);
+    let v = Number(input.value) + delta;
+    const min = input.min === "" ? -Infinity : Number(input.min);
+    const max = input.max === "" ? Infinity : Number(input.max);
+    v = clamp(Math.round(v), Math.min(min, max), Math.max(min, max));
+    input.value = v;
+    onSettingInput(input);
+  }
+
+  function bindSteppers() {
+    $$("#modalBody [data-stepkey]").forEach(btn => {
+      let hold = null;
+      const stop = () => {
+        clearTimeout(hold);
+        clearInterval(stepTimer);
+        hold = null;
+        stepTimer = null;
+      };
+      btn.addEventListener("pointerdown", ev => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        stepOnce(btn);
+        hold = setTimeout(() => {
+          stepTimer = setInterval(() => stepOnce(btn), 110);
+        }, 420);
+      });
+      ["pointerup", "pointerleave", "pointercancel"].forEach(t => btn.addEventListener(t, stop));
+    });
   }
 
   function syncSettingUI() {
@@ -1207,6 +1264,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     $$("#modalBody [data-set]").forEach(input => {
       const key = input.dataset.set;
       if (input.type === "checkbox") input.checked = !!s[key];
+      else if (input.dataset.unit === "pct") input.value = Math.round(s[key] * 100);
       else input.value = s[key];
     });
     $$("#modalBody .val[data-for]").forEach(v => {
@@ -2184,6 +2242,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
   }
 
   async function onModalClick(ev) {
+    if (ev.target.closest("[data-stepkey]")) return;
     const tab = ev.target.closest("[data-tab]");
     if (tab) {
       setTab = tab.dataset.tab;
