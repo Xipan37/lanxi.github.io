@@ -238,9 +238,29 @@ const DATA = (function () {
   }
   FAVICON_LIST.forEach(f => (f.url = faviconURL(f)));
 
+  const DEFAULT_PAT = [
+    "歪头对着屏幕轻轻眨眼",
+    "戳了戳你的脸颊",
+    "在你耳边小声说想你",
+    "把额头轻轻靠过来",
+    "晃了晃手里的星星",
+    "偷偷拽了拽你的衣角",
+    "捧着一颗糖递过来",
+    "在你名字后面画了颗心",
+    "隔着屏幕亲了一下",
+    "把灯留了一盏给你",
+    "伸手揉了揉你的头发",
+    "笑了一下又假装没笑",
+    "把你的名字念得很轻",
+    "在你身边坐下不走了",
+    "发来一个抱抱的姿势",
+    "把今天最好的事讲给你"
+  ];
+
   return {
     DEFAULT_CARDS: DEFAULT_CARDS,
     DEFAULT_ATMOSPHERE: DEFAULT_ATMOSPHERE,
+    DEFAULT_PAT: DEFAULT_PAT,
     EMOJI_GROUPS: EMOJI_GROUPS,
     MOOD_EMOJI: MOOD_EMOJI,
     THEMES: THEMES,

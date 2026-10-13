@@ -22,7 +22,8 @@ const Store = (function () {
       peer: { name: "梦角", avatar: "", emoji: "🌙" },
       groups: defaultGroups(),
       cards: DATA.DEFAULT_CARDS.map(t => toCard(t, "none")),
-      atmosphere: DATA.DEFAULT_ATMOSPHERE.slice(),
+      atmo: { opening: DATA.DEFAULT_ATMOSPHERE.slice(), pat: DATA.DEFAULT_PAT.slice() },
+      patDecor: { mine: "◆", peer: "★", mineAct: "拍了拍", peerAct: "拍了拍" },
       emojis: cloneEmojis(DATA.EMOJI_GROUPS),
       customStickers: [],
       images: [],
@@ -41,7 +42,10 @@ const Store = (function () {
         combineMin: 1,
         combineMax: 3,
         patChance: 0.12,
+        patReplyChance: 0.7,
+        patMinePhrase: false,
         stickerChance: 0.14,
+        quoteChance: 0.25,
         proactiveOn: true,
         proactiveMin: 1,
         proactiveMax: 15,
@@ -124,9 +128,19 @@ const Store = (function () {
     merged.settings = Object.assign({}, base.settings, saved.settings || {});
     merged.timers = saved.timers && typeof saved.timers === "object" ? saved.timers : {};
     merged.cards = normalizeCards(saved.cards);
+    if (!merged.atmo || typeof merged.atmo !== "object") {
+      const legacy = Array.isArray(saved.atmosphere) ? saved.atmosphere : DATA.DEFAULT_ATMOSPHERE.slice();
+      merged.atmo = { opening: legacy.slice(), pat: (DATA.DEFAULT_PAT || legacy).slice() };
+    }
+    if (!Array.isArray(merged.atmo.opening) || !merged.atmo.opening.length) merged.atmo.opening = DATA.DEFAULT_ATMOSPHERE.slice();
+    if (!Array.isArray(merged.atmo.pat) || !merged.atmo.pat.length) merged.atmo.pat = (DATA.DEFAULT_PAT || DATA.DEFAULT_ATMOSPHERE).slice();
+    if (!merged.patDecor || typeof merged.patDecor !== "object") merged.patDecor = { mine: "◆", peer: "★", mineAct: "拍了拍", peerAct: "拍了拍" };
+    if (!merged.patDecor.mine) merged.patDecor.mine = "◆";
+    if (!merged.patDecor.peer) merged.patDecor.peer = "★";
+    if (!merged.patDecor.mineAct) merged.patDecor.mineAct = "拍了拍";
+    if (!merged.patDecor.peerAct) merged.patDecor.peerAct = "拍了拍";
     if (!Array.isArray(merged.groups) || !merged.groups.length) merged.groups = base.groups;
     if (!merged.groups.some(g => g.id === "none")) merged.groups.unshift({ id: "none", name: "未分组" });
-    if (!Array.isArray(merged.atmosphere)) merged.atmosphere = base.atmosphere;
     if (!Array.isArray(merged.messages)) merged.messages = [];
     if (!Array.isArray(merged.letters)) merged.letters = [];
     if (!Array.isArray(merged.moodLog)) merged.moodLog = [];
@@ -138,6 +152,22 @@ const Store = (function () {
     if (!merged.emojis["颜表情"]) merged.emojis["颜表情"] = DATA.EMOJI_GROUPS["颜表情"].slice();
     if (!merged.mood || typeof merged.mood !== "object") merged.mood = base.mood;
     if (!merged.dayFlags || typeof merged.dayFlags !== "object") merged.dayFlags = {};
+    if (Array.isArray(merged.messages)) {
+      let touched = false;
+      merged.messages.forEach(m => {
+        if (m && m.kind === "note" && typeof m.text === "string" && m.text.indexOf("拍了拍") >= 0) {
+          m.kind = "pat";
+          m.mine = m.text.indexOf("你 拍了拍") === 0 || m.text.indexOf("你拍了拍") === 0;
+          if (!m.text || !m.text.trim()) m.text = "";
+          touched = true;
+        }
+      });
+      if (touched) {
+        try {
+          localStorage.setItem(KEY, JSON.stringify(merged));
+        } catch (e) {}
+      }
+    }
     return merged;
   }
 

@@ -193,6 +193,33 @@
   </div>
 </div>
 
+<div class="cropper" id="cropper" hidden>
+  <div class="crop-box">
+    <div class="crop-title">划定截取范围</div>
+    <div class="crop-stage" id="cropStage">
+      <img id="cropImg" alt="" />
+      <div class="crop-rect" id="cropRect">
+        <span class="ch nw" data-h="nw"></span>
+        <span class="ch ne" data-h="ne"></span>
+        <span class="ch sw" data-h="sw"></span>
+        <span class="ch se" data-h="se"></span>
+        <span class="grid-v v1"></span><span class="grid-v v2"></span>
+        <span class="grid-h h1"></span><span class="grid-h h2"></span>
+      </div>
+    </div>
+    <div class="crop-ratios">
+      <button class="ratio on" data-ratio="free">自由</button>
+      <button class="ratio" data-ratio="1">1:1</button>
+      <button class="ratio" data-ratio="43">4:3</button>
+      <button class="ratio" data-ratio="169">16:9</button>
+    </div>
+    <div class="crop-actions">
+      <button class="btn ghost" id="cropCancel">取消</button>
+      <button class="btn" id="cropOk">确定截取</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal" id="modal" hidden>
   <div class="modal-box">
     <div class="modal-head"><h3 id="modalTitle">标题</h3><button class="mclose" id="modalClose">✕</button></div>

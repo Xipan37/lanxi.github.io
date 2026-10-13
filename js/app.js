@@ -39,6 +39,7 @@
     return h ? h + ":" + pad(m) + ":" + pad(sec) : pad(m) + ":" + pad(sec);
   };
   const weekName = ts => "周" + "日一二三四五六"[new Date(ts).getDay()];
+const JOIN_MARK = "　";
 
   let state = Store.get();
   const S = () => state.settings;
@@ -60,12 +61,14 @@
   let cardGroup = "all";
   let cardBatch = false;
   let cardPick = {};
+let editingCard = null;
   let addGroup = "none";
   let emojiBatch = false;
   let emojiPick = {};
   let stickerBatch = false;
   let stickerPick = {};
   let faviconPick = null;
+let decorDraft = null;
 
   const PAIR_KEYS = [
     ["replyMin", "replyMax"],
@@ -137,6 +140,12 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     btnSpeaker: $("#btnSpeaker"),
     btnVideo: $("#btnVideo"),
     callBubble: $("#callBubble"),
+    cropper: $("#cropper"),
+    cropStage: $("#cropStage"),
+    cropRect: $("#cropRect"),
+    cropImg: $("#cropImg"),
+    cropOk: $("#cropOk"),
+    cropCancel: $("#cropCancel"),
     bubbleAvatar: $("#bubbleAvatar"),
     bubbleName: $("#bubbleName"),
     bubbleTimer: $("#bubbleTimer"),
@@ -165,9 +174,23 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     }, 2600);
   }
 
-  function atmosphereText() {
-    const list = state.atmosphere.length ? state.atmosphere : Store.defaultAtmosphere();
+  function openingLine() {
+    const list = state.atmo.opening.length ? state.atmo.opening : Store.defaultAtmosphere();
     return pickOne(list);
+  }
+
+  function patLine() {
+    const clean = arr =>
+      (arr || []).filter(t => t && String(t).replace(/[\s\u200b-\u200d\ufeff]/g, "").length > 0).map(t => String(t).replace(/[\u200b-\u200d\ufeff]/g, "").trim());
+    const list = clean(state.atmo.pat);
+    const pool = list.length ? list : clean(DATA.DEFAULT_PAT);
+    const line = pool.length ? pickOne(pool) : "";
+    return line || clean(DATA.DEFAULT_PAT)[0] || "歪头对着屏幕轻轻眨眼";
+  }
+
+  function patText(m) {
+    const t = m && m.text != null ? String(m.text).replace(/[\u200b-\u200d\ufeff]/g, "").trim() : "";
+    return t || patLine();
   }
 
   function cardText(c) {
@@ -222,6 +245,22 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
   }
 
   function msgHTML(m) {
+if (m.kind === "pat") {
+      const decor = state.patDecor;
+      const d = m.mine ? decor.mine : decor.peer;
+      const act = (m.mine ? decor.mineAct : decor.peerAct) || "拍了拍";
+      const showPhrase = m.mine ? S().patMinePhrase === true : true;
+      const who = m.mine ? state.user.name : state.peer.name;
+      const to = m.mine ? state.peer.name : state.user.name;
+      const deco = d ? '<span class="pd">' + esc(d) + "</span> " : "";
+      const decoEnd = d ? ' <span class="pd">' + esc(d) + "</span>" : "";
+      const phrase = showPhrase && m.text ? " 【" + esc(m.text) + "】" : "";
+      return (
+        '<div class="sys-pat" data-id="' + m.id + '"><i class="pl"></i>' +
+        '<span class="ptxt">' + deco + esc(who) + " " + esc(act) + " " + esc(to) + phrase + decoEnd + "</span>" +
+        '<i class="pr"></i></div>'
+      );
+    }
     if (m.kind === "note") {
       return '<div class="sys-msg" data-id="' + m.id + '"><span>' + esc(m.text) + "</span></div>";
     }
@@ -251,10 +290,14 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       body = '<div class="recalled">' + (m.role === "me" ? "你" : esc(state.peer.name)) + " 撤回了一条消息</div>";
     } else {
       let inner = "";
-      if (m.quote) inner += '<div class="quote-box">❝ ' + esc(m.quote.text || "（内容已删除）") + "</div>";
+      if (m.quote) {
+        inner +=
+          '<div class="quote-box"><span class="qn">' + esc(m.quote.name || "") + '</span><span class="qt">' +
+          esc(m.quote.text || "（内容已删除）") + "</span></div>";
+      }
       if (m.kind === "sticker" || m.kind === "image") inner += '<img src="' + esc(m.img) + '" alt="" />';
       else if (m.kind === "emoji") inner += '<span style="font-size:2.3em;line-height:1.2">' + esc(m.text) + "</span>";
-      else inner += esc(m.text);
+      else inner += renderText(m.text);
       body = "<div>" + inner + "</div>";
     }
     const bubbleCls = "bubble" + styleCls + (m.kind === "sticker" || m.kind === "image" ? " sticker" : "");
@@ -308,7 +351,8 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       html +=
         '<div class="typing">' +
         avatarHTML(state.peer, "sm") +
-        '<div class="dots"><i></i><i></i><i></i></div>' +
+        '<span class="tn">' + esc(state.peer.name) + " 正在输入</span>" +
+        '<span class="dots"><i></i><i></i><i></i></span>' +
         "</div>";
     }
     scroller.innerHTML = html;
@@ -569,7 +613,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       const n = randInt(s.combineMin, Math.max(s.combineMin, s.combineMax));
       const parts = [];
       for (let i = 0; i < n; i++) parts.push(pickCards(randInt(1, 3)).join(""));
-      return parts.join(" ");
+      return parts.join(JOIN_MARK);
     }
     const n = Math.random() < 0.22 ? 2 : 1;
     return pickCards(n).join("");
@@ -581,6 +625,10 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     const lines = [];
     for (let i = 0; i < n; i++) lines.push(pickCards(randInt(1, 3)).join(""));
     return lines.join("\n\n");
+  }
+
+  function renderText(t) {
+    return esc(t).split(JOIN_MARK).join('<i class="jgap"></i>');
   }
 
   function randomEmoji() {
@@ -599,9 +647,17 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     renderAll(true);
   }
 
+  function aiSendMsg(msg) {
+    pushMsg(msg);
+    renderAll(true);
+  }
+
   function aiReply() {
     const s = S();
-    aiSend(buildAiText());
+    const quote = lastUserText();
+    const msg = { role: "ai", kind: "text", text: buildAiText() };
+    if (quote && Math.random() < s.quoteChance) msg.quote = { role: "me", name: state.user.name, text: quote };
+    aiSendMsg(msg);
     if (Math.random() < s.stickerChance) {
       setTimeout(() => {
         if (state.customStickers.length && Math.random() < 0.3) aiSend("", "sticker");
@@ -609,6 +665,16 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       }, randInt(600, 1800));
     }
     if (Math.random() < s.patChance) setTimeout(() => aiPat(false), randInt(1500, 6000));
+  }
+
+  function lastUserText() {
+    let seen = 0;
+    for (let i = state.messages.length - 1; i >= 0 && seen < 12; i--) {
+      const m = state.messages[i];
+      seen++;
+      if (m.role === "me" && m.kind === "text" && !m.recalled && m.text) return m.text.slice(0, 40);
+    }
+    return null;
   }
 
   function shakePeer() {
@@ -620,17 +686,15 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
   }
 
   function aiPat(fromUser) {
-    const p = state.peer;
+    pushMsg({ role: "sys", kind: "pat", mine: !!fromUser, text: patLine() });
     if (fromUser) {
-      pushMsg({ role: "sys", kind: "note", text: "你 拍了拍 " + p.name });
-      patHint("你 拍了拍 <b>" + esc(p.name) + "</b><br><span>" + esc(atmosphereText()) + "</span>");
-    } else {
-      pushMsg({ role: "sys", kind: "note", text: p.name + " 拍了拍 你" });
-      patHint("<b>" + esc(p.name) + "</b> 拍了拍你<br><span>" + esc(atmosphereText()) + "</span>");
+      shakePeer();
+      renderAll(true);
+      return;
     }
     shakePeer();
-    renderAll();
-    if (!fromUser && Math.random() < 0.35) {
+    renderAll(true);
+    if (Math.random() < 0.35) {
       setTimeout(() => aiSend(buildAiText()), randInt(800, 2000));
     }
   }
@@ -638,7 +702,15 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
   function doUserPat() {
     aiPat(true);
     shakePeer();
-    if (Math.random() < 0.5) setTimeout(() => aiSend(buildAiText()), randInt(900, 2500));
+    const s = S();
+    if (Math.random() < (s.patReplyChance != null ? s.patReplyChance : 0.7)) {
+      setTimeout(() => {
+        pushMsg({ role: "sys", kind: "pat", mine: false, text: patLine() });
+        if (Math.random() < 0.55) setTimeout(() => aiSend(buildAiText()), randInt(700, 1800));
+      }, randInt(700, 2400));
+    } else if (Math.random() < 0.5) {
+      setTimeout(() => aiSend(buildAiText()), randInt(900, 2500));
+    }
   }
 
   /* ===================== 写信 ===================== */
@@ -755,17 +827,67 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       "</div>" +
       (list.length
         ? list
-            .map(
-              o =>
+            .map(o => {
+              if (editingCard === o.i) {
+                return (
+                  '<div class="card-row sel" data-card-row="' + o.i + '">' +
+                  '<div class="card-edit"><input type="text" id="cardEditInput" value="' + esc(o.c.text) + '" maxlength="120">' +
+                  '<button class="btn tiny" data-card-save="' + o.i + '">保存</button>' +
+                  '<button class="btn tiny ghost" data-card-cancel="1">取消</button></div></div>'
+                );
+              }
+              return (
                 '<div class="card-row' + (cardPick[o.i] ? " sel" : "") + '" data-card-row="' + o.i + '">' +
                 (cardBatch ? '<button class="pick-box' + (cardPick[o.i] ? " on" : "") + '" data-card-pick="' + o.i + '">' + (cardPick[o.i] ? "✓" : "") + "</button>" : "") +
                 '<span class="ct">' + esc(o.c.text) + "</span>" +
                 '<span class="cg">' + esc(groupName(o.c.group || "none")) + "</span>" +
+                '<button class="btn tiny ghost" data-card-edit="' + o.i + '">编辑</button>' +
                 '<button class="btn tiny ghost" data-card-del="' + o.i + '">删</button>' +
                 "</div>"
-            )
+              );
+            })
             .join("")
-        : '<div class="empty">没有匹配的���卡</div>');
+        : '<div class="empty">没有匹配的字卡</div>');
+  }
+
+  function startCardEdit(i) {
+    editingCard = i;
+    renderCardList();
+    const inp = $("#cardEditInput");
+    if (inp) {
+      inp.focus();
+      const v = inp.value.length;
+      inp.setSelectionRange(v, v);
+      inp.onkeydown = ev => {
+        if (ev.key === "Enter") saveCardEdit(i);
+        if (ev.key === "Escape") {
+          editingCard = null;
+          renderCardList();
+        }
+      };
+    }
+  }
+
+  function saveCardEdit(i) {
+    const inp = $("#cardEditInput");
+    const val = inp ? inp.value.trim() : "";
+    editingCard = null;
+    if (!val) {
+      renderCardList();
+      toast("字卡内容不能为空");
+      return;
+    }
+    if (state.cards[i]) {
+      const dup = state.cards.filter((c, k) => k !== i && c.text === val).length;
+      if (dup > 0 && !confirm("已存在相同字卡，仍要保存吗？")) {
+        renderCardList();
+        return;
+      }
+      state.cards[i].text = val;
+      persist();
+      toast("已保存修改");
+    }
+    renderCardList();
   }
 
   function exportCards() {
@@ -945,6 +1067,8 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       num("combineMax", "最多", 1, 10) +
       "</div></div>" +
       rng("patChance", "梦角主动拍一拍概率", 0, 100, "pct") +
+      rng("patReplyChance", "我拍一拍后梦角用拍一拍语回应", 0, 100, "pct") +
+      rng("quoteChance", "回复时引用你消息的概率", 0, 100, "pct") +
       rng("stickerChance", "回复附带表情概率", 0, 100, "pct") +
       "</div>" +
       '<div class="card-box" style="margin-top:14px">' +
@@ -1051,13 +1175,25 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
 
     const moodPanel =
       '<div class="card-box">' +
-      '<div class="note" style="margin-bottom:8px">氛围感内容用于「开场动画」和「拍一拍」提示，每行一条，运行时随机显示。</div>' +
-      '<textarea id="atmInput">' + esc(state.atmosphere.join("\n")) + "</textarea>" +
-      '<div class="list-tools" style="margin-top:10px">' +
-      '<button class="btn tiny" data-act="saveAtmosphere">保存</button>' +
-      '<button class="btn tiny ghost" data-act="resetAtmosphere">恢复默认</button>' +
-      "</div>" +
-      '<div class="note">当前共 ' + state.atmosphere.length + " 条氛围感。</div>" +
+      '<div class="row"><span class="count-pill">开场动画文案 ' + state.atmo.opening.length + " 条</span>" +
+      '<span class="count-pill">拍一拍文案 ' + state.atmo.pat.length + " 条</span></div>" +
+      '<div class="field"><label>开场动画内容（每行一条，随机显示）</label>' +
+      '<textarea id="atmOpening">' + esc(state.atmo.opening.join("\n")) + "</textarea>" +
+      '<div class="list-tools" style="margin-top:8px">' +
+      '<button class="btn tiny" data-act="saveAtmoOpening">保存开场文案</button>' +
+      '<button class="btn tiny ghost" data-act="resetAtmoOpening">恢复默认</button>' +
+      '<button class="btn tiny ghost" data-act="previewOpening">预览</button>' +
+      "</div></div>" +
+      '<div class="field"><label>拍一拍内容（每行一条，随机显示在【】里）</label>' +
+      '<textarea id="atmPat">' + esc(state.atmo.pat.join("\n")) + "</textarea>" +
+      '<div class="list-tools" style="margin-top:8px">' +
+      '<button class="btn tiny" data-act="saveAtmoPat">保存拍一拍文案</button>' +
+      '<button class="btn tiny ghost" data-act="resetAtmoPat">恢复默认</button>' +
+      '<button class="btn tiny ghost" data-act="previewPat">预览</button>' +
+      "</div></div>" +
+      '<div class="list-tools"><button class="btn ghost tiny" data-act="openDecor">拍一拍样式（符号 / 动作）</button>' +
+      '<button class="btn ghost tiny" data-act="previewOpening">预览开场动画</button></div>' +
+      '<div class="note">拍一拍会显示为：—— 符号 昵称 【文案】 符号 ——</div>' +
       "</div>";
 
     const emojiPanel = emojiManageHTML();
@@ -1302,9 +1438,12 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     if (key === "fontSize") s.fontSize = clamp(s.fontSize, 12, 24);
     persist();
     if (APPEARANCE_KEYS.indexOf(key) >= 0) applyAppearance();
-    if (["openingStyle", "openingGlow", "openingBg", "openingText", "openingStar", "openingDot", "openingStars", "openingSky"].indexOf(key) >= 0) {
+    if (["openingStyle", "openingGlow", "openingBg", "openingText", "openingStar", "openingDot", "openingStars", "openingSky", "patMinePhrase"].indexOf(key) >= 0) {
       applyOpening();
       buildStarfield();
+      const pv = $("#decorPreview");
+      if (pv) pv.innerHTML = decorPreviewHTML();
+      renderChat();
     }
     if (RERENDER_KEYS.indexOf(key) >= 0) renderAll(true);
     const pairInputs = PAIR_KEYS.filter(p => p[0] === key || p[1] === key);
@@ -1753,7 +1892,13 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       const list = q ? state.emojis[g].filter(e => e.indexOf(q) === -1) : state.emojis[g];
       if (!list.length) return;
       html += '<div class="emoji-group-title">' + esc(g) + "</div><div class='emoji-grid'>";
-      html += list.map(e => '<button data-emoji="' + esc(e) + '">' + e + "</button>").join("");
+      html +=
+        list
+          .map(
+            e =>
+              '<button data-emoji="' + esc(e) + '"><span class="em">' + e + '</span><i class="tile-del" data-del-emoji="' + esc(e) + '">✕</i></button>'
+          )
+          .join("");
       html += "</div>";
     });
     el.emojiGrid.innerHTML = html || '<div class="empty">没有匹配的表情</div>';
@@ -1855,9 +2000,208 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     el.input.style.overflowY = el.input.scrollHeight > max ? "auto" : "hidden";
   }
 
+  function bindLongPress(root, sel, cls) {
+    if (!root) return;
+    let timer = null;
+    let fired = null;
+    root.addEventListener("pointerdown", ev => {
+      const target = ev.target.closest(sel);
+      if (!target) return;
+      fired = null;
+      timer = setTimeout(() => {
+        target.classList.add(cls);
+        fired = target;
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate(12);
+          } catch (e) {}
+        }
+      }, 430);
+    });
+    const clear = () => {
+      clearTimeout(timer);
+      timer = null;
+    };
+    ["pointerup", "pointercancel", "pointerleave", "scroll"].forEach(t => root.addEventListener(t, clear, true));
+    root.addEventListener(
+      "pointermove",
+      ev => {
+        if (timer && fired !== null) clear();
+      },
+      true
+    );
+  }
+
+  /* ---------- 裁剪 ---------- */
+  let cropper = null;
+
+  function cropImage(file, maxSize, quality) {
+    return new Promise(resolve => {
+      const fr = new FileReader();
+      fr.onerror = () => resolve(null);
+      fr.onload = () => {
+        const img = new Image();
+        img.onerror = () => resolve(null);
+        img.onload = () => {
+          openCropper(img, maxSize, quality, resolve);
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  function openCropper(img, maxSize, quality, done) {
+    const overlay = el.cropper;
+    const stage = el.cropStage;
+    const rect = el.cropRect;
+    const holder = el.cropImg;
+    holder.src = img.src;
+    overlay.hidden = false;
+    const stageBox = { w: 0, h: 0 };
+    setTimeout(() => {
+      const maxW = stage.clientWidth;
+      const maxH = stage.clientHeight;
+      const r = Math.min(maxW / img.width, maxH / img.height, 1);
+      const dw = Math.max(1, Math.round(img.width * r));
+      const dh = Math.max(1, Math.round(img.height * r));
+      holder.style.width = dw + "px";
+      holder.style.height = dh + "px";
+      stageBox.w = dw;
+      stageBox.h = dh;
+      const norm = { x: 0.08, y: 0.08, w: 0.84, h: 0.84 };
+      cropper = { img: img, maxSize: maxSize, quality: quality, done: done, box: stageBox, norm: norm, ratio: "free", drag: null };
+      applyRect();
+      bindCropEvents();
+    }, 20);
+
+    function applyRect() {
+      const n = cropper.norm;
+      rect.style.left = n.x * cropper.box.w + "px";
+      rect.style.top = n.y * cropper.box.h + "px";
+      rect.style.width = n.w * cropper.box.w + "px";
+      rect.style.height = n.h * cropper.box.h + "px";
+    }
+
+    function bindCropEvents() {
+      stage.onpointerdown = ev => {
+        const n = cropper.norm;
+        const px = (ev.clientX - stage.getBoundingClientRect().left) / cropper.box.w;
+        const py = (ev.clientY - stage.getBoundingClientRect().top) / cropper.box.h;
+        const handle = ev.target.closest(".ch");
+        if (handle) {
+          cropper.drag = { mode: handle.dataset.h, px: px, py: py, n: Object.assign({}, n) };
+        } else if (px >= n.x && px <= n.x + n.w && py >= n.y && py <= n.y + n.h) {
+          cropper.drag = { mode: "move", px: px, py: py, n: Object.assign({}, n) };
+        } else {
+          cropper.drag = { mode: "move", px: px, py: py, n: Object.assign({}, n), recenter: true };
+        }
+        stage.setPointerCapture && stage.setPointerCapture(ev.pointerId);
+        ev.preventDefault();
+      };
+      stage.onpointermove = ev => {
+        if (!cropper || !cropper.drag) return;
+        const box = stage.getBoundingClientRect();
+        const px = (ev.clientX - box.left) / cropper.box.w;
+        const py = (ev.clientY - box.top) / cropper.box.h;
+        const d = cropper.drag;
+        let n = Object.assign({}, d.n);
+        if (d.mode === "move") {
+          n.x = clamp(d.n.x + (px - d.px), 0, 1 - d.n.w);
+          n.y = clamp(d.n.y + (py - d.py), 0, 1 - d.n.h);
+          if (d.recenter) {
+            n.x = clamp(px - d.n.w / 2, 0, 1 - d.n.w);
+            n.y = clamp(py - d.n.h / 2, 0, 1 - d.n.h);
+          }
+        } else {
+          const right = d.n.x + d.n.w;
+          const bottom = d.n.y + d.n.h;
+          if (d.mode.indexOf("w") >= 0) n.x = Math.min(clamp(px, 0, right - 0.06), right - 0.06);
+          if (d.mode.indexOf("e") >= 0) n.w = clamp(px - d.n.x, 0.06, 1 - d.n.x);
+          if (d.mode.indexOf("n") >= 0) n.y = Math.min(clamp(py, 0, bottom - 0.06), bottom - 0.06);
+          if (d.mode.indexOf("s") >= 0) n.h = clamp(py - d.n.y, 0.06, 1 - d.n.y);
+          const ratio = cropper.ratio === "free" ? 0 : Number(cropper.ratio);
+          if (ratio) {
+            const targetH = (n.w * cropper.box.w) / (ratio * cropper.box.h);
+            if (d.mode.indexOf("n") >= 0) {
+              n.y = clamp(bottom - targetH, 0, bottom - 0.06);
+              n.h = bottom - n.y;
+            } else if (d.mode.indexOf("s") >= 0) {
+              n.h = clamp(targetH, 0.06, bottom - n.y);
+            } else {
+              n.w = clamp(n.h * ratio * cropper.box.h / cropper.box.w, 0.06, right - n.x);
+            }
+          }
+        }
+        cropper.norm = n;
+        applyRect();
+        ev.preventDefault();
+      };
+      stage.onpointerup = stage.onpointercancel = () => {
+        if (cropper) cropper.drag = null;
+      };
+    }
+
+    $$("#cropper .ratio").forEach(b => {
+      b.onclick = () => {
+        $$("#cropper .ratio").forEach(x => x.classList.remove("on"));
+        b.classList.add("on");
+        cropper.ratio = b.dataset.ratio;
+        const ratio = cropper.ratio === "free" ? 0 : Number(cropper.ratio);
+        if (ratio) {
+          let w = 0.8;
+          let h = (w * cropper.box.w) / (ratio * cropper.box.h);
+          if (h > 0.8) {
+            h = 0.8;
+            w = (h * ratio * cropper.box.h) / cropper.box.w;
+          }
+          cropper.norm = { x: (1 - w) / 2, y: (1 - h) / 2, w: w, h: h };
+          applyRect();
+        }
+      };
+    });
+
+    el.cropOk.onclick = () => {
+      const c = cropper;
+      const n = c.norm;
+      const sx = Math.round(n.x * img.width);
+      const sy = Math.round(n.y * img.height);
+      const sw = Math.max(1, Math.round(n.w * img.width));
+      const sh = Math.max(1, Math.round(n.h * img.height));
+      const scale = Math.min(1, (c.maxSize || 900) / Math.max(sw, sh));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(sw * scale));
+      canvas.height = Math.max(1, Math.round(sh * scale));
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+      closeCropper();
+      c.done(canvas.toDataURL("image/jpeg", c.quality || 0.82));
+    };
+    el.cropCancel.onclick = () => {
+      const c = cropper;
+      closeCropper();
+      if (c) c.done(null);
+    };
+    overlay.onclick = ev => {
+      if (ev.target === overlay) el.cropCancel.click();
+    };
+  }
+
+  function closeCropper() {
+    el.cropper.hidden = true;
+    el.cropStage.onpointerdown = el.cropStage.onpointermove = el.cropStage.onpointerup = null;
+    cropper = null;
+  }
+
   async function pickImages() {
     const files = await pickFiles("image/*");
     if (!files || !files.length) return;
+    await addChatImages(files);
+  }
+
+  async function addChatImages(files) {
     const status = $("#stickerStatus");
     if (status) {
       status.classList.remove("done");
@@ -1867,12 +2211,11 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     let done = 0;
     for (let i = 0; i < files.length; i++) {
       try {
-        const url = await readImage(files[i], 900, 0.82);
+        const url = await cropImage(files[i], 900, 0.82);
+        if (!url) continue;
         state.images.unshift({ src: url, ts: Date.now() });
         done++;
-      } catch (e) {
-        /* skip */
-      }
+      } catch (e) {}
     }
     if (state.images.length > 60) state.images.length = 60;
     persist();
@@ -2039,11 +2382,32 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     $("#btnMinCall").addEventListener("click", minimizeCall);
     bindCallBubble();
     el.emojiGrid.addEventListener("click", ev => {
+      const del = ev.target.closest("[data-del-emoji]");
+      if (del) {
+        ev.stopPropagation();
+        const v = del.dataset.delEmoji;
+        Object.keys(state.emojis).forEach(g => {
+          const i = state.emojis[g].indexOf(v);
+          if (i >= 0) state.emojis[g].splice(i, 1);
+        });
+        persist();
+        renderStickerPanel();
+        renderEmojiMgr();
+        toast("已删除 " + v);
+        return;
+      }
       const b = ev.target.closest("[data-emoji]");
       if (!b) return;
-      insertToInput(b.dataset.emoji);
+      if (b.classList.contains("show-del")) {
+        b.classList.remove("show-del");
+        return;
+      }
+      insertToInput(b.querySelector(".em").textContent);
       toggleStickerPanel("emoji");
     });
+    bindLongPress(el.emojiGrid, "[data-emoji]", "show-del");
+    bindLongPress(el.customGrid, ".ci", "show-del");
+    bindLongPress(el.imageGrid, ".ci", "show-del");
     el.emojiGrid.addEventListener("contextmenu", ev => {
       const b = ev.target.closest("[data-emoji]");
       if (!b) return;
@@ -2060,10 +2424,17 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     el.customGrid.addEventListener("click", ev => {
       const del = ev.target.closest("[data-del-sticker]");
       if (del) {
+        ev.stopPropagation();
         state.customStickers.splice(Number(del.dataset.delSticker), 1);
         persist();
         renderStickerPanel();
+        renderStickerMgr();
         toast("已删除");
+        return;
+      }
+      const ci = ev.target.closest(".ci");
+      if (ci && ci.classList.contains("show-del")) {
+        ci.classList.remove("show-del");
         return;
       }
       const img = ev.target.closest("[data-attach]");
@@ -2072,10 +2443,16 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     el.imageGrid.addEventListener("click", ev => {
       const del = ev.target.closest("[data-del-image]");
       if (del) {
+        ev.stopPropagation();
         state.images.splice(Number(del.dataset.delImage), 1);
         persist();
         renderStickerPanel();
         toast("已删除");
+        return;
+      }
+      const ci = ev.target.closest(".ci");
+      if (ci && ci.classList.contains("show-del")) {
+        ci.classList.remove("show-del");
         return;
       }
       const img = ev.target.closest("[data-img-attach]");
@@ -2115,6 +2492,20 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
 
     el.modalBody.addEventListener("click", onModalClick);
     el.modalBody.addEventListener("input", ev => {
+      const da = ev.target.closest("[data-decor-act-custom]");
+      if (da) {
+        decorDraft[da.dataset.decorActCustom + "Act"] = da.value;
+        const prev0 = $("#decorPreview");
+        if (prev0) prev0.innerHTML = decorPreviewHTML();
+        return;
+      }
+      const dc = ev.target.closest("[data-decor-custom]");
+      if (dc) {
+        decorDraft[dc.dataset.decorCustom] = dc.value;
+        const prev = $("#decorPreview");
+        if (prev) prev.innerHTML = decorPreviewHTML();
+        return;
+      }
       if (ev.target.id === "emojiMgrSearch") {
         renderEmojiMgr();
         return;
@@ -2138,6 +2529,25 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       }
     });
     el.modalBody.addEventListener("change", ev => {
+      const da = ev.target.closest("[data-decor-act]");
+      if (da) {
+        const key = da.dataset.decorAct;
+        decorDraft[key + "Act"] = da.value;
+        const inpA = $('#modalBody [data-decor-act-custom="' + key + '"]');
+        if (inpA) inpA.value = da.value;
+        const prevA = $("#decorPreview");
+        if (prevA) prevA.innerHTML = decorPreviewHTML();
+        return;
+      }
+      const ds = ev.target.closest("[data-decor]");
+      if (ds) {
+        decorDraft[ds.dataset.decor] = ds.value;
+        const inp = $('#modalBody [data-decor-custom="' + ds.dataset.decor + '"]');
+        if (inp) inp.value = ds.value;
+        const prev = $("#decorPreview");
+        if (prev) prev.innerHTML = decorPreviewHTML();
+        return;
+      }
       const s = ev.target.closest("[data-set]");
       if (s) onSettingInput(s);
     });
@@ -2224,12 +2634,11 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     let done = 0;
     for (let i = 0; i < files.length; i++) {
       try {
-        const dataUrl = await readImage(files[i], 220, 0.85);
+        const dataUrl = await cropImage(files[i], 240, 0.85);
+        if (!dataUrl) continue;
         state.customStickers.push({ src: dataUrl, ts: Date.now() });
         done++;
-      } catch (e) {
-        /* skip */
-      }
+      } catch (e) {}
     }
     persist();
     renderStickerPanel();
@@ -2239,6 +2648,75 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       status.textContent = "添加完成（" + done + " 张）";
     }
     toast("添加完成，共 " + done + " 张");
+  }
+
+  const DECOR_OPTIONS = [
+      ["四角星", "◆"],
+      ["实心星星", "★"],
+      ["空心星星", "☆"],
+      ["实心圆", "●"],
+      ["空心圆", "○"],
+      ["爱心", "❤"],
+      ["空心爱心", "♡"],
+      ["月亮", "☾"],
+      ["太阳", "☀"],
+      ["花朵", "✿"],
+      ["闪光", "✧"],
+      ["菱形", "◇"],
+      ["方块", "■"],
+      ["三角", "▲"],
+      ["水滴", "💧"],
+      ["不要装饰", ""]
+    ];
+
+  const PAT_ACTIONS = [
+      ["拍了拍", "拍了拍"],
+      ["戳了戳", "戳了戳"],
+      ["摸了摸头", "摸了摸头"],
+      ["抱了抱", "抱了抱"],
+      ["蹭了蹭", "蹭了蹭"],
+      ["亲了一下", "亲了一下"],
+      ["勾了勾手指", "勾了勾手指"],
+      ["弹了一下脑门", "弹了一下脑门"],
+      ["捏了捏脸", "捏了捏脸"],
+      ["拽了拽衣角", "拽了拽衣角"],
+      ["拍了拍肩膀", "拍了拍肩膀"]
+    ];
+
+  function openDecorEditor() {
+    if (!decorDraft) decorDraft = { mine: state.patDecor.mine, peer: state.patDecor.peer, mineAct: state.patDecor.mineAct || "拍了拍", peerAct: state.patDecor.peerAct || "拍了拍" };
+    const opts = (list, cur, attr, key) =>
+      list.map(o => '<option value="' + esc(o[1]) + '"' + (o[1] === cur ? " selected" : "") + ">" + o[0] + "</option>").join("");
+    const block = (key, label, sym, act) =>
+      '<div class="field"><label>' + label + "</label>" +
+      '<div class="pair"><select data-decor="' + key + '">' + opts(DECOR_OPTIONS, sym, null) + "</select>" +
+      '<select data-decor-act="' + key + '">' + opts(PAT_ACTIONS, act, null) + "</select></div>" +
+      '<div class="pair" style="margin-top:8px"><input type="text" data-decor-custom="' + key + '" maxlength="2" value="' + esc(sym) + '" placeholder="自定义装饰符号">' +
+      '<input type="text" data-decor-act-custom="' + key + '" maxlength="8" value="' + esc(act) + '" placeholder="自定义动作，如 揪了揪"></div>' +
+      "</div>";
+    openModal(
+      "拍一拍样式",
+      '<div class="card-box">' +
+        block("mine", "我发出的（拍梦角）", decorDraft.mine, decorDraft.mineAct) +
+        block("peer", "对方发出的（拍你）", decorDraft.peer, decorDraft.peerAct) +
+        '<div class="decor-preview" id="decorPreview">' + decorPreviewHTML() + "</div>" +
+        '<div class="row"><label>我拍一拍显示词条</label><span class="switch"><input type="checkbox" data-set="patMinePhrase"' + (S().patMinePhrase === true ? " checked" : "") + "><i></i></span></div>" +
+        '<div class="note">默认关闭：你拍梦角只显示「我 动作 梦角」；梦角拍你才带【词条】。装饰符号与动作都可下拉选择，也可自己输入。</div></div>' +
+        '<div class="list-tools" style="margin-top:14px"><button class="btn ghost" data-act="decorCancel">取消</button>' +
+        '<button class="btn" data-act="decorSave" style="flex:1">保存</button></div>'
+    );
+  }
+
+  function decorPreviewHTML() {
+    const d = decorDraft;
+    const sym = s => (s ? '<span class="pd">' + esc(s) + "</span> " : "");
+    const symEnd = s => (s ? ' <span class="pd">' + esc(s) + "</span>" : "");
+    const showMine = S().patMinePhrase === true;
+    return (
+      "<div>我：" + sym(d.mine) + esc(state.user.name) + " " + esc(d.mineAct || "拍了拍") + " " + esc(state.peer.name) +
+      (showMine ? "【…】" : "") + symEnd(d.mine) + "</div>" +
+      "<div>对方：" + sym(d.peer) + esc(state.peer.name) + " " + esc(d.peerAct || "拍了拍") + " " + esc(state.user.name) + "【…】" + symEnd(d.peer) + "</div>"
+    );
   }
 
   async function onModalClick(ev) {
@@ -2334,7 +2812,23 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     const cardDel = ev.target.closest("[data-card-del]");
     if (cardDel) {
       state.cards.splice(Number(cardDel.dataset.cardDel), 1);
+      editingCard = null;
       persist();
+      renderCardList();
+      return;
+    }
+    const cardEdit = ev.target.closest("[data-card-edit]");
+    if (cardEdit) {
+      startCardEdit(Number(cardEdit.dataset.cardEdit));
+      return;
+    }
+    const cardSave = ev.target.closest("[data-card-save]");
+    if (cardSave) {
+      saveCardEdit(Number(cardSave.dataset.cardSave));
+      return;
+    }
+    if (ev.target.closest("[data-card-cancel]")) {
+      editingCard = null;
       renderCardList();
       return;
     }
@@ -2349,7 +2843,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     const a = act.dataset.act;
 
     if (a === "previewOpening") {
-      el.openingText.textContent = atmosphereText();
+      el.openingText.textContent = openingLine();
       el.openingSub.textContent = "给 " + state.peer.name + " 的字卡传讯 · " + fmtDate(Date.now());
       el.opening.classList.remove("fade");
       el.opening.hidden = false;
@@ -2548,20 +3042,62 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       renderCardList();
       syncSettingUI();
       toast("已恢复默认字卡");
-    } else if (a === "saveAtmosphere") {
-      const ta = $("#atmInput");
-      const lines = ta.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    } else if (a === "saveAtmoOpening") {
+      const lines = ($("#atmOpening").value || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       if (!lines.length) {
-        toast("至少留一条氛围感");
+        toast("至少留一条开场文案");
         return;
       }
-      state.atmosphere = lines;
+      state.atmo.opening = lines;
       persist();
-      toast("已保存 " + lines.length + " 条");
-    } else if (a === "resetAtmosphere") {
-      state.atmosphere = Store.defaultAtmosphere();
+      toast("开场文案已保存 " + lines.length + " 条");
+    } else if (a === "resetAtmoOpening") {
+      state.atmo.opening = Store.defaultAtmosphere();
       persist();
       openSettings(setTab);
+      toast("已恢复默认开场文案");
+    } else if (a === "saveAtmoPat") {
+      const lines = ($("#atmPat").value || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (!lines.length) {
+        toast("至少留一条拍一拍文案");
+        return;
+      }
+      state.atmo.pat = lines;
+      persist();
+      toast("拍一拍文案已保存 " + lines.length + " 条");
+    } else if (a === "resetAtmoPat") {
+      state.atmo.pat = DATA.DEFAULT_PAT.slice();
+      persist();
+      openSettings(setTab);
+      toast("已恢复默认拍一拍文案");
+    } else if (a === "previewPat") {
+      doUserPat();
+      closeModal();
+      return;
+    } else if (a === "openDecor") {
+      decorDraft = {
+        mine: state.patDecor.mine,
+        peer: state.patDecor.peer,
+        mineAct: state.patDecor.mineAct || "拍了拍",
+        peerAct: state.patDecor.peerAct || "拍了拍"
+      };
+      openDecorEditor();
+      return;
+    } else if (a === "decorSave") {
+      state.patDecor = {
+        mine: decorDraft.mine || "",
+        peer: decorDraft.peer || "",
+        mineAct: (decorDraft.mineAct || "拍了拍").trim() || "拍了拍",
+        peerAct: (decorDraft.peerAct || "拍了拍").trim() || "拍了拍"
+      };
+      persist();
+      openSettings(setTab);
+      toast("拍一拍样式已保存");
+      return;
+    } else if (a === "decorCancel") {
+      decorDraft = null;
+      openSettings(setTab);
+      return;
     } else if (a === "addEmoji") {
       addEmojiFlow();
     } else if (a === "resetEmoji") {
@@ -2683,7 +3219,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
       el.opening.hidden = true;
       return;
     }
-    el.openingText.textContent = atmosphereText();
+    el.openingText.textContent = openingLine();
     el.openingSub.textContent = "给 " + state.peer.name + " 的字卡传讯 · " + fmtDate(Date.now());
     el.opening.hidden = false;
     el.openingEnter.onclick = ev => {
