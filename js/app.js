@@ -39,7 +39,6 @@
     return h ? h + ":" + pad(m) + ":" + pad(sec) : pad(m) + ":" + pad(sec);
   };
   const weekName = ts => "周" + "日一二三四五六"[new Date(ts).getDay()];
-const JOIN_MARK = "　";
 
   let state = Store.get();
   const S = () => state.settings;
@@ -69,6 +68,7 @@ let editingCard = null;
   let stickerPick = {};
   let faviconPick = null;
 let decorDraft = null;
+let emojiAddGroup = null;
 
   const PAIR_KEYS = [
     ["replyMin", "replyMax"],
@@ -611,24 +611,38 @@ if (m.kind === "pat") {
     const s = S();
     if (s.combine) {
       const n = randInt(s.combineMin, Math.max(s.combineMin, s.combineMax));
-      const parts = [];
-      for (let i = 0; i < n; i++) parts.push(pickCards(randInt(1, 3)).join(""));
-      return parts.join(JOIN_MARK);
+      const per = randInt(1, Math.max(1, s.combinePerMax != null ? s.combinePerMax : 2));
+      const sentences = [];
+      for (let i = 0; i < n; i++) sentences.push(pickCards(per).join(""));
+      return sentences.join(" ");
     }
     const n = Math.random() < 0.22 ? 2 : 1;
     return pickCards(n).join("");
   }
 
+  function joinLetterParts(list) {
+    let t = list[0] || "";
+    for (let i = 1; i < list.length; i++) t += (Math.random() < 0.35 ? "。" : "，") + list[i];
+    t = t.trim();
+    if (!/[。！？…~]$/.test(t)) t += "。";
+    return t;
+  }
+
   function buildLetterText() {
     const s = S();
     const n = randInt(s.letterSentMin, Math.max(s.letterSentMin, s.letterSentMax));
-    const lines = [];
-    for (let i = 0; i < n; i++) lines.push(pickCards(randInt(1, 3)).join(""));
-    return lines.join("\n\n");
+    const parts = [];
+    for (let i = 0; i < n; i++) parts.push(pickCards(randInt(1, 3)).join(""));
+    const brk = Math.random() < (s.letterBreakChance != null ? s.letterBreakChance : 0.6);
+    if (!brk) return joinLetterParts(parts);
+    const per = randInt(1, Math.max(1, s.letterParaMax != null ? s.letterParaMax : 2));
+    const paras = [];
+    for (let i = 0; i < parts.length; i += per) paras.push(joinLetterParts(parts.slice(i, i + per)));
+    return paras.join("\n\n");
   }
 
   function renderText(t) {
-    return esc(t).split(JOIN_MARK).join('<i class="jgap"></i>');
+    return esc(t).replace(/[ \t]{3,}/g, "  ");
   }
 
   function randomEmoji() {
@@ -1031,7 +1045,7 @@ if (m.kind === "pat") {
     const rng = (key, label, min, max, unit, extra) => stepper(key, label, min, max, unit, 5, extra);
     const num = (key, label, min, max) =>
       '<div style="flex:1;min-width:110px"><div class="note" style="margin:0 0 4px">' + label + "</div>" +
-      '<input type="number" data-set="' + key + '" min="' + min + '" max="' + max + '" value="' + s[key] + '"></div>';
+      '<input type="number" step="0.1" data-set="' + key + '" min="' + min + '" max="' + max + '" value="' + s[key] + '"></div>';
 
     const tabs = [
       ["reply", "回复设置"],
@@ -1066,6 +1080,7 @@ if (m.kind === "pat") {
       num("combineMin", "最少", 1, 10) +
       num("combineMax", "最多", 1, 10) +
       "</div></div>" +
+      num("combinePerMax", "每条最多卡片（1 ~ 3 张）", 1, 3) +
       rng("patChance", "梦角主动拍一拍概率", 0, 100, "pct") +
       rng("patReplyChance", "我拍一拍后梦角用拍一拍语回应", 0, 100, "pct") +
       rng("quoteChance", "回复时引用你消息的概率", 0, 100, "pct") +
@@ -1111,7 +1126,9 @@ if (m.kind === "pat") {
       '<option value="video"' + (s.callType === "video" ? " selected" : "") + ">视频通话（黑底头像 + 自拍小窗）</option>" +
       "</select></div>" +
       rng("aiAnswerChance", "梦角接听率", 0, 100, "pct") +
+      rng("peerHangupChance", "梦角中途挂断概率", 0, 100, "pct") +
       '<div class="note">未接听的概率会自动分配为「拒接」与「未接听」。</div>' +
+      '<div class="note">「中途挂断」命中后，梦角会在通话进行中随机某个时刻先挂断，并留下一条系统提示。</div>' +
       '<div class="note">视频/语音通话只是模拟画面，不会录音或录像。</div>' +
       "</div>" +
       '<div class="card-box" style="margin-top:14px">' +
@@ -1125,13 +1142,17 @@ if (m.kind === "pat") {
 
     const letterPanel =
       '<div class="card-box">' +
-      '<div class="field"><label>回信等待时间（分钟，最长 720 分钟 = 12 小时）</label><div class="pair">' +
-      num("letterReplyMin", "最短", 1, 720) +
-      num("letterReplyMax", "最长", 1, 720) +
+      '<div class="field"><label>回信等待时间（分钟，最长 720 分钟 = 12 小时；可填小数，0.1 ≈ 6 秒）</label><div class="pair">' +
+      num("letterReplyMin", "最短", 0.1, 720) +
+      num("letterReplyMax", "最长", 0.1, 720) +
       "</div></div>" +
       '<div class="field"><label>回信句数（1 ~ 30 句，内容来自字卡库随机抽取）</label><div class="pair">' +
       num("letterSentMin", "最少", 1, 30) +
       num("letterSentMax", "最多", 1, 30) +
+      "</div></div>" +
+      stepper("letterBreakChance", "分段换行概率", 0, 100, "pct", 5, '<div class="note">命中时信件会随机分成几段（段间空一行）；不命中就是一整段连续文字。</div>') +
+      '<div class="field"><label>每段最多句数（1 ~ 6）</label><div class="pair">' +
+      num("letterParaMax", "最多", 1, 6) +
       "</div></div>" +
       "</div>" +
       '<div class="card-box" style="margin-top:14px">' +
@@ -1274,13 +1295,14 @@ if (m.kind === "pat") {
 
   function emojiManageHTML() {
     return (
-      '<div class="card-box"><div class="row"><span class="count-pill">Emoji 库共 ' + totalEmoji() + " 个</span>" +
-      '<button class="btn tiny ghost" data-act="emojiSearchToggle">搜索</button>' +
+      '<div class="card-box"><div class="row"><span class="count-pill">Emoji 库共 ' + totalEmoji() + " 个 · " + Object.keys(state.emojis).length + " 组</span>" +
       '<button class="btn tiny" data-act="addEmoji">+ 添加 Emoji</button>' +
+      '<button class="btn tiny ghost" data-act="emojiGroupNew">+ 新建分组</button>' +
       '<button class="btn tiny ghost" data-act="resetEmoji">恢复默认</button></div>' +
-      '<input type="search" id="emojiMgrSearch" placeholder="搜索后点击即可删除" style="margin-bottom:10px">' +
+      emojiGroupRowHTML() +
+      '<input type="search" id="emojiMgrSearch" placeholder="搜索后点击即可删除" style="margin:8px 0 10px">' +
       '<div id="emojiMgrGrid" style="max-height:300px;overflow:auto"></div>' +
-      '<div class="note">表情包分「Emoji」「颜表情」「自定义图片」「聊天图片」四部分；这里可批量增删 Emoji。</div></div>' +
+      '<div class="note">分组可新增 / 重命名 / 删除；添加 Emoji 时可选择分组。长按表情或点击可删除。</div></div>' +
       '<div class="card-box" style="margin-top:14px"><div class="row">' +
       '<span class="count-pill">自定义表情 ' + state.customStickers.length + " 张</span>" +
       '<button class="btn tiny" data-act="addSticker">＋ 批量添加图片</button>' +
@@ -1630,18 +1652,72 @@ if (m.kind === "pat") {
     renderLetterPanel();
   }
 
+  function letterStatus(l) {
+    const n = (l.replies || []).length;
+    if (l.dir === "out") {
+      if (!l.replied) return "等待回信";
+      return "已回信" + (n ? " · 追问 " + n + " 次" : "");
+    }
+    if (!n) return "待回复";
+    return "已回复 " + n + " 次";
+  }
+
+  function sendLetterReply(letterId) {
+    const ta = $("#letterReplyInput");
+    const text = ta ? ta.value.trim() : "";
+    if (!text) {
+      toast("写点什么再寄出吧");
+      return;
+    }
+    const l = state.letters.filter(x => x.id === letterId)[0];
+    if (!l) return;
+    if (!Array.isArray(l.replies)) l.replies = [];
+    l.replies.push({ role: "me", text: text, ts: Date.now() });
+    persist();
+    toast("回信已寄出");
+    renderLetterPanel();
+    if (Math.random() < 0.65) {
+      setTimeout(() => {
+        const cur = state.letters.filter(x => x.id === letterId)[0];
+        if (!cur) return;
+        if (!Array.isArray(cur.replies)) cur.replies = [];
+        cur.replies.push({ role: "ai", text: buildLetterText(), ts: Date.now() });
+        persist();
+        toast(state.peer.name + " 回信了 ✉️");
+        if (letterView && letterView.id === cur.id) renderLetterPanel();
+      }, randInt(20000, 90000));
+    }
+  }
+
   function renderLetterPanel() {
     if (letterView) {
       const l = letterView;
       l.read = true;
       persist();
       renderBadges();
+      const thread = (l.replies || [])
+        .map(
+          r =>
+            '<div class="lr ' + r.role + '"><div class="lr-head">' + esc(r.role === "me" ? state.user.name : state.peer.name) + " · " + fmtDate(r.ts) + " " + fmtTime(r.ts) + "</div>" +
+            '<div class="lr-body">' + esc(r.text) + "</div></div>"
+        )
+        .join("");
+      const status = letterStatus(l);
       const html =
-        '<div class="row"><button class="btn tiny ghost" data-act="letterBack">‹ 返回</button></div>' +
+        '<div class="row"><button class="btn tiny ghost" data-act="letterBack">‹ 返回</button>' +
+        '<span class="count-pill" style="margin-left:auto">' + esc(status) + "</span></div>" +
         '<div class="letter-item"><h4>✉️ ' + esc(l.title) + "</h4>" +
         '<div class="meta-line">' + (l.dir === "out" ? "你写给" + esc(state.peer.name) : esc(state.peer.name) + " 写给你") + " · " + fmtDate(l.ts) + " " + fmtTime(l.ts) + "</div>" +
         '<div class="letter-body">' + esc(l.content) + "</div>" +
-        '<div class="letter-sign">—— ' + esc(l.dir === "out" ? state.user.name : state.peer.name) + "</div></div>";
+        '<div class="letter-sign">—— ' + esc(l.dir === "out" ? state.user.name : state.peer.name) + "</div></div>" +
+        (thread ? '<div class="lr-wrap">' + thread + "</div>" : "") +
+        (l.dir === "in"
+          ? '<div class="field" style="margin-top:14px"><label>回复这封信</label><textarea id="letterReplyInput" placeholder="写点什么回给 ' +
+            esc(state.peer.name) + '…"></textarea></div>' +
+            '<button class="btn block" data-act="sendLetterReply">寄出回信</button>' +
+            '<div class="note">回信后 ' + esc(state.peer.name) + " 会按概率再回你一次。</div>"
+          : "") +
+        '<div style="height:14px"></div>';
       openModal("信件", html);
       return;
     }
@@ -1652,6 +1728,7 @@ if (m.kind === "pat") {
             l =>
               '<div class="letter-item" data-letter-open="' + l.id + '" style="cursor:pointer"><h4>✉️ ' + esc(l.title) +
               (l.dir === "out" ? "" : l.read ? "" : ' <span class="tag">未读</span>') +
+              (l.dir === "out" ? "" : (l.replies || []).length ? ' <span class="tag done">已回复</span>' : ' <span class="tag wait">待回复</span>') +
               (l.dir === "out" && !l.replied ? ' <span class="tag wait">等待回信</span>' : "") +
               "</h4>" +
               '<div class="meta-line">' + (l.dir === "out" ? "寄给" + esc(state.peer.name) : esc(state.peer.name) + " 寄给你") + " · " + fmtDate(l.ts) + " " + fmtTime(l.ts) + "</div>" +
@@ -1749,19 +1826,37 @@ if (m.kind === "pat") {
     el.callTimer.hidden = false;
     el.callTimer.textContent = "00:00";
     renderCall();
-    if (!call.tick) {
-      call.tick = setInterval(() => {
+    clearInterval(call.tick);
+    call.tick = null;
+    call.tick = setInterval(() => {
+      if (!call || call.state !== "connected") return;
+      const t = fmtDur(Date.now() - call.startTs);
+      if (call.minimized) el.bubbleTimer.textContent = t;
+      else el.callTimer.textContent = t;
+    }, 300);
+    clearTimeout(call.hangTimer);
+    call.hangTimer = null;
+    const chance = S().peerHangupChance != null ? S().peerHangupChance : 0.05;
+    if (Math.random() < chance) {
+      call.hangTimer = setTimeout(() => {
         if (!call || call.state !== "connected") return;
-        const t = fmtDur(Date.now() - call.startTs);
-        if (call.minimized) el.bubbleTimer.textContent = t;
-        else el.callTimer.textContent = t;
-      }, 500);
+        const dur = fmtDur(Date.now() - call.startTs);
+        pushMsg({
+          role: "sys",
+          kind: "note",
+          text: state.peer.name + " 挂断了" + callTypeName(call.type) + " · 时长 " + dur
+        });
+        call.state = "peer-hangup";
+        endCall();
+        toast(state.peer.name + " 挂断了通话");
+      }, randInt(20000, 120000));
     }
   }
 
   function endCall(reason) {
     if (!call) return;
     clearInterval(call.tick);
+    clearTimeout(call.hangTimer);
     if (call.state === "connected") {
       const dur = fmtDur(Date.now() - call.startTs);
       pushMsg({ role: "sys", kind: "note", text: "通话结束 · " + callTypeName(call.type) + " " + dur });
@@ -2003,32 +2098,32 @@ if (m.kind === "pat") {
   function bindLongPress(root, sel, cls) {
     if (!root) return;
     let timer = null;
-    let fired = null;
-    root.addEventListener("pointerdown", ev => {
-      const target = ev.target.closest(sel);
-      if (!target) return;
-      fired = null;
+    let target = null;
+    const start = ev => {
+      const t = ev.target.closest(sel);
+      if (!t) return;
+      target = t;
+      if (ev.cancelable) ev.preventDefault();
+      clearTimeout(timer);
       timer = setTimeout(() => {
-        target.classList.add(cls);
-        fired = target;
+        target = null;
+        t.classList.add(cls);
         if (navigator.vibrate) {
           try {
             navigator.vibrate(12);
           } catch (e) {}
         }
-      }, 430);
-    });
+      }, 380);
+    };
     const clear = () => {
       clearTimeout(timer);
       timer = null;
+      target = null;
     };
-    ["pointerup", "pointercancel", "pointerleave", "scroll"].forEach(t => root.addEventListener(t, clear, true));
-    root.addEventListener(
-      "pointermove",
-      ev => {
-        if (timer && fired !== null) clear();
-      },
-      true
+    root.addEventListener("pointerdown", start);
+    root.addEventListener("touchstart", start, { passive: false });
+    ["pointerup", "pointercancel", "pointerleave", "touchend", "touchcancel", "touchmove", "scroll"].forEach(t =>
+      root.addEventListener(t, clear, true)
     );
   }
 
@@ -2554,7 +2649,6 @@ if (m.kind === "pat") {
 
     $("#btnAnswer").addEventListener("click", () => {
       if (!call) return;
-      clearInterval(call.tick);
       connectCall();
     });
     $("#btnHangup").addEventListener("click", () => endCall());
@@ -2604,22 +2698,58 @@ if (m.kind === "pat") {
       if (menuEl && !menuEl.contains(ev.target)) closeMenu();
     });
     window.addEventListener("beforeunload", () => Store.save());
+    document.addEventListener("visibilitychange", () => {
+      if (call && call.state === "connected") {
+        const t = fmtDur(Date.now() - call.startTs);
+        if (call.minimized) el.bubbleTimer.textContent = t;
+        else el.callTimer.textContent = t;
+      }
+    });
   }
 
   async function addEmojiFlow() {
-    const v = prompt("输入一个 Emoji（例如 🥰）");
-    if (!v) return;
-    addEmoji(v.trim());
-    renderStickerPanel();
-    renderEmojiMgr();
-    toast("已加入表情包");
+    const groups = Object.keys(state.emojis);
+    if (emojiAddGroup && groups.indexOf(emojiAddGroup) < 0) emojiAddGroup = groups[0];
+    if (!emojiAddGroup) emojiAddGroup = groups[0];
+    const html =
+      '<div class="card-box">' +
+      '<div class="field"><label>选择分组</label><div class="grp-pick" id="emojiAddGroups">' +
+      groups.map(g => '<button class="' + (g === emojiAddGroup ? "on" : "") + '" data-addemo-grp="' + esc(g) + '">' + esc(g) + "</button>").join("") +
+      '<button data-act="emojiGroupNew">+ 新建分组</button></div></div>' +
+      '<div class="field"><label>Emoji（可直接粘贴，也可用系统键盘输入）</label>' +
+      '<input type="text" id="emojiAddInput" maxlength="8" placeholder="例如 🥰 或 ( ˘ω˘ )"></div>' +
+      '<button class="btn block" data-act="emojiAddOk">添加到「<span id="emojiAddGrpName">' + esc(emojiAddGroup) + "</span>」</button>" +
+      "</div>";
+    openModal("添加表情", html);
+    setTimeout(() => {
+      const inp = $("#emojiAddInput");
+      if (inp) inp.focus();
+    }, 80);
   }
 
-  function addEmoji(v) {
+  function addEmoji(v, group) {
     if (!v) return;
-    if (!state.emojis["常用"]) state.emojis["常用"] = [];
-    if (state.emojis["常用"].indexOf(v) < 0) state.emojis["常用"].unshift(v);
+    const g = group && state.emojis[group] ? group : state.emojis["常用"] ? "常用" : Object.keys(state.emojis)[0];
+    if (!state.emojis[g]) state.emojis[g] = [];
+    if (state.emojis[g].indexOf(v) < 0) state.emojis[g].unshift(v);
     persist();
+  }
+
+  function emojiGroupRowHTML() {
+    const groups = Object.keys(state.emojis);
+    return (
+      '<div class="grp-bar" style="padding-bottom:2px">' +
+      groups
+        .map(
+          g =>
+            '<span class="grp-chip grp-manage">' + esc(g) + '<span class="n">' + state.emojis[g].length + "</span>" +
+            '<button data-emo-rename="' + esc(g) + '" title="重命名">✎</button>' +
+            (groups.length > 1 ? '<button data-emo-del="' + esc(g) + '" title="删除分组">✕</button>' : "") +
+            "</span>"
+        )
+        .join("") +
+      "</div>"
+    );
   }
 
   async function uploadSticker() {
@@ -2721,6 +2851,45 @@ if (m.kind === "pat") {
 
   async function onModalClick(ev) {
     if (ev.target.closest("[data-stepkey]")) return;
+    const eg = ev.target.closest("[data-addemo-grp]");
+    if (eg) {
+      emojiAddGroup = eg.dataset.addemoGrp;
+      $$("#emojiAddGroups button").forEach(b => b.classList.toggle("on", b.dataset.addemoGrp === emojiAddGroup));
+      const nm = $("#emojiAddGrpName");
+      if (nm) nm.textContent = emojiAddGroup;
+      return;
+    }
+    const ern = ev.target.closest("[data-emo-rename]");
+    if (ern) {
+      const old = ern.dataset.emoRename;
+      const name = (prompt("重命名分组", old) || "").trim();
+      if (!name || name === old) return;
+      if (state.emojis[name]) {
+        toast("该分组已存在");
+        return;
+      }
+      const list = state.emojis[name] ? state.emojis[name].concat(state.emojis[old]) : state.emojis[old];
+      delete state.emojis[old];
+      const next = {};
+      Object.keys(state.emojis).forEach(k => (next[k] = state.emojis[k]));
+      next[name] = list;
+      state.emojis = next;
+      persist();
+      openSettings(setTab);
+      toast("已重命名为「" + name + "」");
+      return;
+    }
+    const ede = ev.target.closest("[data-emo-del]");
+    if (ede) {
+      const g = ede.dataset.emoDel;
+      if (!confirm("删除分组「" + g + "」？组内 " + state.emojis[g].length + " 个表情也会一起删除")) return;
+      delete state.emojis[g];
+      persist();
+      openSettings(setTab);
+      renderStickerPanel();
+      toast("已删除分组");
+      return;
+    }
     const tab = ev.target.closest("[data-tab]");
     if (tab) {
       setTab = tab.dataset.tab;
@@ -3100,6 +3269,29 @@ if (m.kind === "pat") {
       return;
     } else if (a === "addEmoji") {
       addEmojiFlow();
+    } else if (a === "emojiGroupNew") {
+      const name = (prompt("新建表情分组名称") || "").trim();
+      if (!name) return;
+      if (state.emojis[name]) {
+        toast("该分组已存在");
+        return;
+      }
+      state.emojis[name] = [];
+      persist();
+      openSettings(setTab);
+      toast("已创建分组「" + name + "」");
+      return;
+    } else if (a === "emojiAddOk") {
+      const inp = $("#emojiAddInput");
+      const v = inp ? inp.value.trim() : "";
+      if (!v) {
+        toast("请输入 Emoji");
+        return;
+      }
+      addEmoji(v, emojiAddGroup);
+      openSettings(setTab);
+      toast("已添加到「" + emojiAddGroup + "」");
+      return;
     } else if (a === "resetEmoji") {
       if (!confirm("恢复默认 Emoji 库？自定义添加的会被覆盖")) return;
       state.emojis = Store.defaultEmojis();
@@ -3139,10 +3331,13 @@ if (m.kind === "pat") {
       const file = await pickFile("image/*");
       if (!file) return;
       try {
-        state.peer.avatar = await readImage(file, 220, 0.85);
+        const url = await cropImage(file, 260, 0.88);
+        if (!url) return;
+        state.peer.avatar = url;
         persist();
         renderTop();
         openSettings(setTab);
+        toast("头像已更换");
       } catch (e) {
         toast("图片读取失败");
       }
@@ -3155,9 +3350,12 @@ if (m.kind === "pat") {
       const file = await pickFile("image/*");
       if (!file) return;
       try {
-        state.user.avatar = await readImage(file, 220, 0.85);
+        const url = await cropImage(file, 260, 0.88);
+        if (!url) return;
+        state.user.avatar = url;
         persist();
         openSettings(setTab);
+        toast("头像已更换");
       } catch (e) {
         toast("图片读取失败");
       }
@@ -3204,6 +3402,9 @@ if (m.kind === "pat") {
       }
       sendLetter(t || pickOne(DATA.LETTER_TITLES), c);
       renderLetterPanel();
+    } else if (a === "sendLetterReply") {
+      if (letterView) sendLetterReply(letterView.id);
+      return;
     } else if (a === "letterBack") {
       letterView = null;
       renderLetterPanel();

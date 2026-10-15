@@ -41,6 +41,7 @@ const Store = (function () {
         combine: false,
         combineMin: 1,
         combineMax: 3,
+        combinePerMax: 2,
         patChance: 0.12,
         patReplyChance: 0.7,
         patMinePhrase: false,
@@ -55,6 +56,7 @@ const Store = (function () {
         callMax: 20,
         callChance: 0.45,
         aiAnswerChance: 0.7,
+        peerHangupChance: 0.05,
         callType: "voice",
         letterReplyMin: 1,
         letterReplyMax: 720,
@@ -64,6 +66,8 @@ const Store = (function () {
         letterChance: 0.6,
         letterSentMin: 1,
         letterSentMax: 30,
+        letterBreakChance: 0.6,
+        letterParaMax: 2,
         moodHours: 1,
         moodChange: 0.7,
         opening: true,
@@ -110,6 +114,20 @@ const Store = (function () {
       .filter(Boolean);
   }
 
+  const EMOJI_KEEP = ["常用", "笑脸", "手势", "符号", "天气", "文字", "颜表情"];
+  function pruneEmojis(saved) {
+    const out = {};
+    EMOJI_KEEP.forEach(function (g) {
+      out[g] = (saved && Array.isArray(saved[g]) && saved[g].length ? saved[g].slice() : DATA.EMOJI_GROUPS[g].slice());
+    });
+    if (saved) {
+      Object.keys(saved).forEach(function (g) {
+        if (EMOJI_KEEP.indexOf(g) < 0 && Array.isArray(saved[g]) && saved[g].length) out[g] = saved[g].slice();
+      });
+    }
+    return out;
+  }
+
   function load() {
     let saved = null;
     try {
@@ -149,6 +167,7 @@ const Store = (function () {
     if (!merged.emojis || typeof merged.emojis !== "object" || !Object.keys(merged.emojis).length) {
       merged.emojis = cloneEmojis(DATA.EMOJI_GROUPS);
     }
+    merged.emojis = pruneEmojis(merged.emojis);
     if (!merged.emojis["颜表情"]) merged.emojis["颜表情"] = DATA.EMOJI_GROUPS["颜表情"].slice();
     if (!merged.mood || typeof merged.mood !== "object") merged.mood = base.mood;
     if (!merged.dayFlags || typeof merged.dayFlags !== "object") merged.dayFlags = {};

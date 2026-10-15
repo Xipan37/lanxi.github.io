@@ -241,8 +241,9 @@ img.avatar{object-fit:cover;display:block}
 .emoji-grid button{
   position:relative;aspect-ratio:1;border-radius:13px;background:var(--panel);border:1px solid var(--border);
   font-size:21px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;
-  transition:.14s;overflow:visible;
+  transition:.14s;overflow:visible;touch-action:manipulation;-webkit-touch-callout:none;user-select:none;
 }
+.emoji-grid button img,.emoji-grid button span{-webkit-user-select:none;user-select:none;pointer-events:none}
 .emoji-grid button:hover{border-color:var(--primary);background:var(--primary-soft)}
 .tile-del{
   position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;
@@ -252,15 +253,15 @@ img.avatar{object-fit:cover;display:block}
 .show-del .tile-del{display:block}
 .emoji-grid button.show-del{border-color:#e5484d;background:#fdeced;animation:delWiggle .3s ease-in-out}
 @keyframes delWiggle{0%{transform:scale(1)}45%{transform:scale(1.14)}100%{transform:scale(1)}}
-.jgap{display:inline-block;width:.8em;height:1em;vertical-align:-.14em;position:relative}
-.jgap::after{content:"";position:absolute;left:50%;top:.14em;bottom:.14em;border-left:1px dashed currentColor;opacity:.2}
 .custom-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(70px,1fr));gap:8px}
 .custom-grid .ci{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--panel)}
 .custom-grid .ci.sel{border-color:var(--primary);box-shadow:0 0 0 2px var(--primary-soft)}
 .custom-grid .ci .pick-box{position:absolute;left:4px;top:4px;z-index:2;background:rgba(255,255,255,.85);border-color:transparent}
 .custom-grid .ci .pick-box.on{background:var(--primary)}
 .emoji-grid button.sel{background:var(--primary-soft);outline:1px solid var(--primary)}
-.custom-grid img{width:100%;height:78px;object-fit:cover;display:block;cursor:pointer}
+.custom-grid img{width:100%;height:78px;object-fit:cover;display:block;cursor:pointer;
+  touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
+.custom-grid .ci{touch-action:manipulation;-webkit-touch-callout:none;user-select:none}
 .custom-grid .del{
   position:absolute;top:-6px;right:-6px;width:22px;height:22px;background:#e5484d;color:#fff;border-radius:50%;
   display:none;align-items:center;justify-content:center;font-size:12px;line-height:1;z-index:3;
@@ -425,6 +426,16 @@ input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--bord
 .letter-sign{text-align:right;color:var(--sub);font-size:.84em;margin-top:12px}
 .tag{font-size:.68em;padding:2px 8px;border-radius:10px;background:var(--primary-soft);color:var(--primary)}
 .tag.wait{background:#ffe9c7;color:#a86b00}
+.tag.done{background:#dff3e6;color:#2a7a4b}
+.lr-wrap{margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.lr{border-radius:12px;padding:10px 12px;max-width:86%;font-size:.92em}
+.lr.me{align-self:flex-end;background:var(--primary-soft)}
+.lr.ai{align-self:flex-start;background:var(--panel);border:1px solid var(--border)}
+.lr-head{font-size:.7em;color:var(--sub);margin-bottom:4px}
+.lr-body{white-space:pre-wrap;word-break:break-word;line-height:1.75}
+.grp-chip.grp-manage{padding-right:6px;display:inline-flex;align-items:center;gap:2px}
+.grp-chip.grp-manage button{border:none;background:transparent;color:var(--sub);font-size:.9em;padding:0 2px}
+.grp-chip.grp-manage button:hover{color:var(--primary)}
 .avatar-edit{display:flex;gap:14px;align-items:center;margin-bottom:8px}
 .avatar-edit img{width:62px;height:62px;border-radius:50%;border:2px solid var(--border)}
 
