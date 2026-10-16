@@ -29,6 +29,8 @@ const Store = (function () {
       images: [],
       messages: [],
       letters: [],
+      dates: [],
+      quizzes: [],
       mood: { emoji: "🌙", status: ["在发呆，等你"], ts: Date.now() },
       moodLog: [],
       dayFlags: {},
@@ -38,6 +40,7 @@ const Store = (function () {
         replyMin: 3,
         replyMax: 300,
         replyChance: 0.75,
+        autoScroll: true,
         combine: false,
         combineMin: 1,
         combineMax: 3,
@@ -68,6 +71,9 @@ const Store = (function () {
         letterSentMax: 30,
         letterBreakChance: 0.6,
         letterParaMax: 2,
+        quizSkipChance: 0.12,
+        quizReplyMin: 5,
+        quizReplyMax: 720,
         moodHours: 1,
         moodChange: 0.7,
         opening: true,
@@ -161,6 +167,30 @@ const Store = (function () {
     if (!merged.groups.some(g => g.id === "none")) merged.groups.unshift({ id: "none", name: "未分组" });
     if (!Array.isArray(merged.messages)) merged.messages = [];
     if (!Array.isArray(merged.letters)) merged.letters = [];
+    if (!Array.isArray(merged.dates)) merged.dates = [];
+    if (!Array.isArray(merged.quizzes)) merged.quizzes = [];
+    if (!merged.timers.quizReplies || typeof merged.timers.quizReplies !== "object") merged.timers.quizReplies = {};
+    merged.dates = merged.dates
+      .filter(d => d && d.date && d.title)
+      .map(d => ({
+        id: d.id || Math.random().toString(36).slice(2, 10),
+        title: String(d.title).slice(0, 24),
+        date: String(d.date),
+        type: d.type === "countdown" ? "countdown" : "anniv"
+      }));
+    merged.quizzes = merged.quizzes
+      .filter(q => q && q.question && Array.isArray(q.options) && q.options.length)
+      .map(q => ({
+        id: q.id || Math.random().toString(36).slice(2, 10),
+        question: String(q.question).slice(0, 60),
+        options: q.options.map(o => String(o).slice(0, 24)).slice(0, 8),
+        createdAt: q.createdAt || Date.now(),
+        status: ["pending", "answered", "skipped"].indexOf(q.status) >= 0 ? q.status : "pending",
+        answer: typeof q.answer === "number" ? q.answer : -1,
+        comment: typeof q.comment === "string" ? q.comment : "",
+        ts: q.ts || 0,
+        read: !!q.read
+      }));
     if (!Array.isArray(merged.moodLog)) merged.moodLog = [];
     if (!Array.isArray(merged.customStickers)) merged.customStickers = [];
     if (!Array.isArray(merged.images)) merged.images = [];

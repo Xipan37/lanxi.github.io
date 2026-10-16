@@ -55,6 +55,10 @@
   let setTab = "reply";
   let diaryDay = Date.now();
   let letterView = null;
+  let dateForm = null;
+  let dateType = "anniv";
+  let quizForm = null;
+  let quizDraft = null;
   let emojiFilter = "";
   let cardSearch = "";
   let cardGroup = "all";
@@ -77,7 +81,8 @@ let emojiAddGroup = null;
     ["callMin", "callMax"],
     ["letterReplyMin", "letterReplyMax"],
     ["letterSentMin", "letterSentMax"],
-    ["letterMin", "letterMax"]
+    ["letterMin", "letterMax"],
+    ["quizReplyMin", "quizReplyMax"]
   ];
 
   const APPEARANCE_KEYS = ["theme", "primary", "myBubble", "aiBubble", "bubbleStyle", "chatColor", "chatImage", "fontSize", "font", "timeStyle", "favicon", "openingStyle", "openingGlow", "openingBg", "openingText", "openingStar", "openingDot", "openingStars", "openingSky"];
@@ -100,6 +105,7 @@ const RERENDER_KEYS = ["bubbleStyle", "font", "timeStyle", "showUserAvatar", "th
     quickBar: $("#quickBar"),
     favBadge: $("#favBadge"),
     letterBadge: $("#letterBadge"),
+    quizBadge: $("#quizBadge"),
     chat: $("#chatList"),
     input: $("#input"),
     send: $("#btnSend"),
@@ -356,8 +362,28 @@ if (m.kind === "pat") {
         "</div>";
     }
     scroller.innerHTML = html;
-    if (force || nearBottom) scroller.scrollTop = scroller.scrollHeight;
-    else scroller.scrollTop = oldTop;
+    const follow = S().autoScroll !== false;
+    if (follow && (force || nearBottom)) jumpChatToEnd(scroller);
+    else jumpScroll(scroller, oldTop);
+  }
+
+  function jumpScroll(scroller, top) {
+    const prev = scroller.style.scrollBehavior;
+    scroller.style.scrollBehavior = "auto";
+    scroller.scrollTop = top;
+    scroller.style.scrollBehavior = prev;
+  }
+
+  function jumpChatToEnd(scroller) {
+    jumpScroll(scroller, scroller.scrollHeight);
+  }
+
+  function scrollChatToEnd(force) {
+    if (S().autoScroll === false) return;
+    const scroller = el.chat;
+    if (!scroller) return;
+    if (!force && scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight > 160) return;
+    jumpChatToEnd(scroller);
   }
 
   function renderBadges() {
@@ -367,6 +393,11 @@ if (m.kind === "pat") {
     const unread = state.letters.filter(l => l.dir === "in" && !l.read).length;
     el.letterBadge.hidden = unread === 0;
     el.letterBadge.textContent = unread;
+    const qUnread = (state.quizzes || []).filter(q => !q.read && q.status !== "pending").length;
+    if (el.quizBadge) {
+      el.quizBadge.hidden = qUnread === 0;
+      el.quizBadge.textContent = qUnread;
+    }
   }
 
   function renderTop() {
@@ -439,6 +470,367 @@ if (m.kind === "pat") {
   }
 
   /* ===================== 定时调度 ===================== */
+
+  /* ===================== 定时调度 ===================== */
+
+  /* ===================== 重要日 ===================== */
+
+  function dayStamp(ts) {
+    const d = new Date(ts);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  }
+
+  function parseDay(s) {
+    const p = String(s || "")
+      .split("-")
+      .map(v => Number(v));
+    if (p.length < 3 || !p[0] || !p[1] || !p[2]) return NaN;
+    return new Date(p[0], p[1] - 1, p[2]).getTime();
+  }
+
+  function daysToDay(s) {
+    const t = parseDay(s);
+    if (isNaN(t)) return null;
+    return Math.round((dayStamp(t) - dayStamp(Date.now())) / 86400000);
+  }
+
+  function dateStat(d) {
+    const diff = daysToDay(d.date);
+    if (diff === null) return { n: 0, text: "日期无效", today: false, past: true };
+    if (d.type === "countdown") {
+      if (diff >= 0) return { n: diff, text: diff === 0 ? "就是今天" : "还剩 " + diff + " 天", today: diff === 0, past: false };
+      return { n: -diff, text: "已经过去 " + -diff + " 天", today: false, past: true };
+    }
+    const passed = -diff;
+    if (passed >= 0) return { n: passed, text: passed === 0 ? "就是今天" : "已经 " + passed + " 天", today: passed === 0, past: true };
+    return { n: -passed, text: "还有 " + -passed + " 天", today: false, past: false };
+  }
+
+  function importantOn(ts) {
+    return (state.dates || []).filter(d => {
+      const t = parseDay(d.date);
+      if (isNaN(t)) return false;
+      if (d.type === "countdown") return dayStamp(t) === dayStamp(ts);
+      const src = new Date(t);
+      const now = new Date(ts);
+      return src.getMonth() === now.getMonth() && src.getDate() === now.getDate();
+    });
+  }
+
+  function openDates() {
+    dateForm = null;
+    openModal("重要日", datesHTML());
+  }
+
+  function datesHTML() {
+    if (dateForm) return dateFormHTML();
+    const list = (state.dates || []).slice().sort((a, b) => (parseDay(a.date) || 0) - (parseDay(b.date) || 0));
+    const items = list
+      .map(d => {
+        const st = dateStat(d);
+        const big = st.today ? "今天" : st.n + " 天";
+        return (
+          '<div class="imp-day ' + d.type + (st.today ? " hit" : "") + '">' +
+          '<div class="id-top"><span class="id-tag">' + (d.type === "countdown" ? "⏳ 倒数日" : "❤ 纪念日") + "</span>" +
+          '<button class="id-del" data-act="dateDel" data-date-del="' + esc(d.id) + '" title="删除">✕</button></div>' +
+          '<div class="id-title">' + esc(d.title) + "</div>" +
+          '<div class="id-num">' + esc(big) + "</div>" +
+          '<div class="id-sub">' + esc(st.text) + " · " + esc(d.date) + "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+    const empty =
+      '<div class="imp-empty"><div class="ie-emo">💝</div><b>还没有纪念日</b><span>去添加一个属于你们的日子吧~</span></div>';
+    return (
+      '<div class="imp-list">' + (items || empty) + "</div>" +
+      '<div class="imp-bar">' +
+      '<button class="btn ghost" data-act="datesClose" style="flex:0 0 96px">关闭</button>' +
+      '<button class="btn primary" data-act="dateAdd" style="flex:1">＋ 新增纪念日</button>' +
+      "</div>"
+    );
+  }
+
+  function dateFormHTML() {
+    const d = dateForm || {};
+    const t = dateType;
+    return (
+      '<div class="row" style="margin-bottom:10px">' +
+      '<button class="btn tiny ghost" data-act="dateBack">← 返回</button>' +
+      '<b style="font-size:16px">＋ 添加纪念日</b>' +
+      "</div>" +
+      '<div class="card-box">' +
+      '<div class="field"><label>🏷 标题名称</label>' +
+      '<input type="text" id="dateTitleInput" maxlength="24" value="' + esc(d.title || "") + '" placeholder="例如：恋爱纪念日、梦角生日"></div>' +
+      '<div class="field"><label>📅 选择日期</label>' +
+      '<input type="date" id="dateDateInput" value="' + esc(d.date || "") + '"></div>' +
+      '<div class="field"><label>▦ 类型</label><div class="type-pick">' +
+      '<button class="tp ' + (t === "anniv" ? "on" : "") + '" data-act="dateType" data-date-type="anniv"><b>❤</b><span>纪念日</span><em>过去 → 今天</em></button>' +
+      '<button class="tp ' + (t === "countdown" ? "on" : "") + '" data-act="dateType" data-date-type="countdown"><b>⏳</b><span>倒数日</span><em>今天 → 未来</em></button>' +
+      "</div></div>" +
+      '<div class="note">' + (t === "anniv" ? "计算从过去某一天到现在已经过了多少天（例如：恋爱纪念日）" : "计算从现在到未来某一天还剩下多少天（例如：生日、跨年）") + "</div>" +
+      "</div>" +
+      '<button class="btn primary block" data-act="dateSave">✔ 保存</button>'
+    );
+  }
+
+  function renderDates() {
+    openModal("重要日", datesHTML());
+  }
+
+  function saveDate() {
+    const ti = $("#dateTitleInput");
+    const di = $("#dateDateInput");
+    const title = ti ? ti.value.trim() : "";
+    const date = di ? di.value : "";
+    if (!title) {
+      toast("写个标题吧~");
+      return;
+    }
+    if (!date || isNaN(parseDay(date))) {
+      toast("选一个日期吧~");
+      return;
+    }
+    const cur = dateForm && dateForm.id ? state.dates.filter(d => d.id === dateForm.id)[0] : null;
+    if (cur) {
+      cur.title = title;
+      cur.date = date;
+      cur.type = dateType;
+    } else {
+      state.dates.push({ id: uid(), title: title, date: date, type: dateType });
+    }
+    persist();
+    dateForm = null;
+    renderDates();
+    toast(cur ? "已更新" : "已添加");
+  }
+
+  function checkImportantToday(silent) {
+    const today = importantOn(Date.now());
+    if (!today.length) return;
+    const flags = state.dayFlags || (state.dayFlags = {});
+    const k = "imp:" + dateKey(Date.now());
+    if (flags[k]) return;
+    flags[k] = true;
+    persist();
+    if (silent) return;
+    const names = today.map(d => d.title + "（" + (d.type === "countdown" ? "倒数日" : "纪念日") + "）").join("、");
+    showNotice("重要日提醒", "今天是 " + names + "，别忘了这一刻~", false);
+  }
+
+  /* ===================== 问卷 ===================== */
+
+  function openQuiz() {
+    quizForm = null;
+    quizDraft = null;
+    markQuizRead();
+    openModal("问卷", quizHTML());
+  }
+
+  function numField(key, label, min, max, val) {
+    return (
+      '<div style="flex:1;min-width:110px"><div class="note" style="margin:0 0 4px">' + label + "</div>" +
+      '<input type="number" step="0.1" data-set="' + key + '" min="' + min + '" max="' + max + '" value="' + val + '"></div>'
+    );
+  }
+
+  function quizWaitText() {
+    const mx = Math.round(S().quizReplyMax || 720);
+    return mx >= 60 ? Math.round(mx / 60) + " 小时" : mx + " 分钟";
+  }
+
+  function quizHTML() {
+    if (quizForm) return quizFormHTML();
+    const s = S();
+    const list = (state.quizzes || []).slice().reverse();
+    const items = list
+      .map(q => {
+        let res = "";
+        if (q.status === "answered") {
+          const picked = q.options[q.answer] || "";
+          res =
+            '<div class="qr-res ok">梦角选了「' + esc(picked) + "」" + (q.comment ? "<span>" + esc(q.comment) + "</span>" : "") + "</div>";
+        } else if (q.status === "skipped") {
+          res = '<div class="qr-res bad">梦角弃答了 · ' + esc(q.comment || "这个问题我不回答") + "</div>";
+        } else {
+          res = '<div class="qr-res wait">等待梦角选择…最长 ' + quizWaitText() + "</div>";
+        }
+        const opts = q.options
+          .map((o, i) => '<li class="' + (q.status === "answered" && i === q.answer ? "picked" : "") + '">' + esc(o) + "</li>")
+          .join("");
+        return (
+          '<div class="quiz-item ' + q.status + '">' +
+          '<div class="qi-top"><span>问卷 · ' + fmtDate(q.createdAt) + "</span>" +
+          (q.status === "pending" ? "" : '<span class="qi-time">' + fmtDate(q.ts) + " " + fmtTime(q.ts) + "</span>") +
+          (q.status === "pending" ? "" : '<button class="id-del" data-act="quizDel" data-quiz-del="' + esc(q.id) + '">✕</button>') +
+          "</div>" +
+          '<div class="qi-q">' + esc(q.question) + "</div>" +
+          '<ol class="qi-opts">' + opts + "</ol>" +
+          res +
+          "</div>"
+        );
+      })
+      .join("");
+    const empty =
+      '<div class="imp-empty"><div class="ie-emo">📋</div><b>还没有问卷</b><span>问梦角一个问题吧，它会随机选一个答案~</span></div>';
+    return (
+      '<div class="card-box"><b>问卷设置</b>' +
+      '<div class="field"><label>作答等待时间（分钟，最长 720 分钟 = 12 小时，可填小数）</label><div class="pair">' +
+      numField("quizReplyMin", "最短", 0.1, 720, s.quizReplyMin) +
+      numField("quizReplyMax", "最长", 0.1, 720, s.quizReplyMax) +
+      "</div></div>" +
+      '<div class="field"><label>梦角弃答概率 <span class="val" data-for="quizSkipChance"></span></label>' +
+      '<div class="stepper"><button class="stp" data-stepkey="quizSkipChance" data-delta="-5">－</button>' +
+      '<input type="range" data-set="quizSkipChance" data-unit="pct" min="0" max="100" step="1" value="' + Math.round((s.quizSkipChance || 0) * 100) + '">' +
+      '<button class="stp" data-stepkey="quizSkipChance" data-delta="5">＋</button></div>' +
+      '<div class="note">命中时梦角会「弃答」，提醒会显示为红色。</div></div></div>' +
+      '<div class="quiz-list">' + (items || empty) + "</div>" +
+      '<div class="imp-bar">' +
+      '<button class="btn ghost" data-act="quizClose" style="flex:0 0 96px">关闭</button>' +
+      '<button class="btn primary" data-act="quizAdd" style="flex:1">＋ 新建问卷</button>' +
+      "</div>"
+    );
+  }
+
+  function quizFormHTML() {
+    const d = quizDraft;
+    const opts = d.options
+      .map(
+        (o, i) =>
+          '<div class="qopt"><span class="qo-idx">' + "ABCDEF"[i] + '</span><input type="text" maxlength="24" data-qopt="' + i + '" value="' + esc(o) + '">' +
+          '<button class="qopt-del" data-act="quizOptDel" data-opt="' + i + '">✕</button></div>'
+      )
+      .join("");
+    return (
+      '<div class="row" style="margin-bottom:10px">' +
+      '<button class="btn tiny ghost" data-act="quizBack">← 返回</button>' +
+      '<b style="font-size:16px">＋ 新建问卷</b></div>' +
+      '<div class="card-box">' +
+      '<div class="field"><label>❓ 你的问题</label>' +
+      '<input type="text" id="quizQ" maxlength="60" value="' + esc(d.question) + '" placeholder="例如：今天想吃什么？"></div>' +
+      '<div class="field"><label>▦ 选项（2 ~ 8 个，数量由你决定）</label><div class="qopts">' + opts + "</div>" +
+      '<button class="btn ghost block" data-act="quizOptAdd" style="margin-top:8px">＋ 添加选项</button></div>' +
+      "</div>" +
+      '<button class="btn primary block" data-act="quizSave">✓ 提交问卷</button>' +
+      '<div class="note" style="margin-top:8px">提交后梦角会在设定时间内随机选一个选项，也有概率弃答。</div>'
+    );
+  }
+
+  function renderQuiz() {
+    openModal("问卷", quizHTML());
+    syncSettingUI();
+    bindSteppers();
+  }
+
+  function saveQuiz() {
+    const qi = $("#quizQ");
+    const q = qi ? qi.value.trim() : "";
+    if (!q) {
+      toast("写个问题吧~");
+      return;
+    }
+    const opts = $$("#modalBody [data-qopt]")
+      .map(i => i.value.trim())
+      .filter(Boolean);
+    if (opts.length < 2) {
+      toast("至少要有 2 个选项");
+      return;
+    }
+    const quiz = {
+      id: uid(),
+      question: q,
+      options: opts,
+      createdAt: Date.now(),
+      status: "pending",
+      answer: -1,
+      comment: "",
+      ts: 0,
+      read: true
+    };
+    state.quizzes.push(quiz);
+    scheduleQuizAnswer(quiz);
+    persist();
+    quizForm = null;
+    quizDraft = null;
+    renderQuiz();
+    toast("问卷已送出，梦角会在 " + quizWaitText() + " 内选择");
+  }
+
+  function scheduleQuizAnswer(q) {
+    const s = S();
+    const mn = Math.max(0.1, s.quizReplyMin || 5);
+    const mx = Math.max(mn, s.quizReplyMax || 720);
+    const wait = randInt(Math.round(mn * 60), Math.round(mx * 60)) * 1000;
+    state.timers.quizReplies = state.timers.quizReplies || {};
+    state.timers.quizReplies[q.id] = Date.now() + wait;
+    armQuizReplies();
+  }
+
+  function armQuizReplies() {
+    clearTimeout(handles.quizReply);
+    const map = state.timers.quizReplies || {};
+    const ids = Object.keys(map).filter(id => (state.quizzes || []).some(q => q.id === id && q.status === "pending"));
+    if (!ids.length) return;
+    ids.sort((a, b) => map[a] - map[b]);
+    handles.quizReply = setTimeout(() => fireQuizAnswer(ids[0]), clamp(map[ids[0]] - Date.now(), 300, 2147483000));
+  }
+
+  function fireQuizAnswer(id) {
+    const map = state.timers.quizReplies || {};
+    delete map[id];
+    persist();
+    armQuizReplies();
+    const q = (state.quizzes || []).filter(x => x.id === id)[0];
+    if (!q || q.status !== "pending") return;
+    const s = S();
+    const skip = Math.random() < (s.quizSkipChance != null ? s.quizSkipChance : 0.12);
+    q.ts = Date.now();
+    q.read = false;
+    if (skip) {
+      q.status = "skipped";
+      q.answer = -1;
+      q.comment = pickOne(DATA.QUIZ_SKIP_LINES);
+    } else {
+      q.status = "answered";
+      q.answer = randInt(0, q.options.length - 1);
+      q.comment = Math.random() < 0.6 ? pickOne(DATA.QUIZ_COMMENTS) : "";
+    }
+    persist();
+    renderBadges();
+    if (!el.modal.hidden && el.modalTitle.textContent === "问卷") renderQuiz();
+    showNotice(
+      skip ? "梦角弃答了" : "梦角回答了你的问卷",
+      skip ? "「" + q.question + "」" + q.comment : "「" + q.question + "」→ " + q.options[q.answer],
+      skip
+    );
+  }
+
+  function markQuizRead() {
+    let touched = false;
+    (state.quizzes || []).forEach(q => {
+      if (!q.read && q.status !== "pending") {
+        q.read = true;
+        touched = true;
+      }
+    });
+    if (touched) {
+      persist();
+      renderBadges();
+    }
+  }
+
+  function showNotice(title, body, danger) {
+    const box = $("#miniNotice");
+    if (!box) return;
+    const ico = $("#mnIco");
+    if (ico) ico.textContent = danger ? "💢" : "📋";
+    $("#mnTitle").textContent = title;
+    $("#mnBody").textContent = body;
+    box.classList.toggle("bad", !!danger);
+    box.hidden = false;
+    clearTimeout(box._t);
+    box._t = setTimeout(() => (box.hidden = true), 6000);
+  }
 
   function setTimer(kind, delay) {
     state.timers[kind] = Date.now() + Math.max(0, delay);
@@ -570,6 +962,7 @@ if (m.kind === "pat") {
     if (!t.call) scheduleNext("call", "callMin", "callMax", 60000);
     if (!t.letter) scheduleNext("letter", "letterMin", "letterMax", 60000);
     if (!t.mood) setTimer("mood", Math.max(1, S().moodHours) * 3600000);
+    armQuizReplies();
     if (!state.moodLog.length) {
       state.moodLog.unshift({ ts: Date.now(), emoji: state.mood.emoji, status: state.mood.status.slice() });
       persist();
@@ -1020,6 +1413,7 @@ if (m.kind === "pat") {
     el.modal.hidden = true;
     el.modalBody.innerHTML = "";
     letterView = null;
+    if (typeof scrollChatToEnd === "function") scrollChatToEnd(false);
   }
 
   /* ===================== 设置面板 ===================== */
@@ -1075,6 +1469,8 @@ if (m.kind === "pat") {
       "</div><div class='note'>梦角会在这个区间内回复你，超出最长等待就不再回复。</div></div>" +
       rng("replyChance", "回复概率", 0, 100, "pct") +
       '<div class="note">不是每条消息都会回复，75% 的概率触发。</div>' +
+      sw("autoScroll", "新消息自动定位到最新") +
+      '<div class="note">关掉后聊天不会自动下滑；你翻上去看历史时也不会被拉回底部。</div>' +
       sw("combine", "拼字卡（随机拼接）") +
       '<div class="field"><label>拼接句数（1 ~ 10 句）</label><div class="pair">' +
       num("combineMin", "最少", 1, 10) +
@@ -1550,9 +1946,12 @@ if (m.kind === "pat") {
       const emo = rec.length ? rec[0].emoji : "";
       const cls = ["dot"];
       if (rec.length) cls.push("has");
+      const imp = importantOn(ts);
+      if (imp.length) cls.push("imp");
       if (sameDay(ts, Date.now())) cls.push("today");
       if (sameDay(ts, diaryDay)) cls.push("sel");
-      cells += '<button class="' + cls.join(" ") + '" data-day="' + ts + '" title="' + d + '日">' + (emo || d) + "</button>";
+      const impTitle = imp.length ? " · " + imp.map(d => d.title).join("、") : "";
+      cells += '<button class="' + cls.join(" ") + '" data-day="' + ts + '" title="' + d + "日" + impTitle + '">' + (emo || d) + "</button>";
     }
     const shown = new Date(base.getFullYear(), base.getMonth(), 1);
     return (
@@ -1622,6 +2021,7 @@ if (m.kind === "pat") {
     state.dayFlags[k] = true;
     persist();
     showTodayPopup(false);
+    checkImportantToday(false);
   }
 
   function openFav() {
@@ -2326,6 +2726,7 @@ if (m.kind === "pat") {
   /* ===================== 消息菜单 ===================== */
 
   let menuEl = null;
+  let menuOpenedAt = 0;
 
   function closeMenu() {
     if (menuEl) {
@@ -2336,6 +2737,7 @@ if (m.kind === "pat") {
 
   function openMenu(msgId, x, y) {
     closeMenu();
+    menuOpenedAt = Date.now();
     const m = state.messages.filter(v => v.id === msgId)[0];
     if (!m || m.kind === "note") return;
     menuEl = document.createElement("div");
@@ -2433,6 +2835,8 @@ if (m.kind === "pat") {
     $("#btnUploadSticker").addEventListener("click", uploadSticker);
     $("#btnSettings").addEventListener("click", () => openSettings());
     $("#btnLetterTop").addEventListener("click", openLetter);
+    $("#btnDates").addEventListener("click", openDates);
+    $("#btnQuiz").addEventListener("click", openQuiz);
     $("#btnCall").addEventListener("click", () => (call ? null : startCall("out")));
     $("#btnDiary").addEventListener("click", openDiary);
     $("#btnFav").addEventListener("click", openFav);
@@ -2471,6 +2875,10 @@ if (m.kind === "pat") {
     $("#btnUploadImage").addEventListener("click", pickImages);
     el.myAvatarBtn.addEventListener("click", openMyInfo);
     $("#todayClose").addEventListener("click", () => (el.todayPopup.hidden = true));
+    const mnClose = $("#mnClose");
+    if (mnClose) mnClose.addEventListener("click", () => ($("#miniNotice").hidden = true));
+    const mnBox = $("#miniNotice");
+    if (mnBox) mnBox.addEventListener("click", ev => { if (ev.target.closest(".mn-x")) mnBox.hidden = true; });
     el.callOverlay.addEventListener("click", ev => {
       if (ev.target === el.callOverlay && call && call.state === "connected") minimizeCall();
     });
@@ -2555,19 +2963,30 @@ if (m.kind === "pat") {
     });
 
     let pressTimer = null;
+    let suppressTapUntil = 0;
     el.chat.addEventListener("contextmenu", ev => {
       const bubble = ev.target.closest("[data-menu]");
       if (!bubble) return;
       ev.preventDefault();
+      suppressTapUntil = Date.now() + 700;
       openMenu(bubble.dataset.menu, ev.clientX, ev.clientY);
     });
     el.chat.addEventListener("pointerdown", ev => {
       const bubble = ev.target.closest("[data-menu]");
       if (!bubble) return;
       const rect = bubble.getBoundingClientRect();
+      const px = ev.clientX;
+      const py = ev.clientY;
       pressTimer = setTimeout(() => {
+        suppressTapUntil = Date.now() + 700;
+        if (navigator.vibrate) navigator.vibrate(12);
         openMenu(bubble.dataset.menu, rect.left + rect.width / 2, rect.top + rect.height / 2);
       }, 480);
+      const onMove = e2 => {
+        if (Math.abs(e2.clientX - px) > 8 || Math.abs(e2.clientY - py) > 8) clearTimeout(pressTimer);
+      };
+      el.chat.addEventListener("pointermove", onMove, { once: true });
+      ["pointerup", "pointercancel"].forEach(t => el.chat.addEventListener(t, () => el.chat.removeEventListener("pointermove", onMove), { once: true }));
     });
     ["pointerup", "pointermove", "pointercancel", "scroll"].forEach(t =>
       el.chat.addEventListener(t, () => clearTimeout(pressTimer), true)
@@ -2577,13 +2996,25 @@ if (m.kind === "pat") {
       if (letter) {
         letterView = state.letters.filter(l => l.id === letter.dataset.letter)[0] || null;
         if (letterView) renderLetterPanel();
+        return;
       }
+      const bubble = ev.target.closest("[data-menu]");
+      if (!bubble) return;
+      if (Date.now() < suppressTapUntil) return;
+      const sel = window.getSelection ? String(window.getSelection() || "") : "";
+      if (sel.trim()) return;
+      const rect = bubble.getBoundingClientRect();
+      openMenu(bubble.dataset.menu, rect.left + rect.width / 2, rect.top + rect.height / 2);
     });
 
     $("#modalClose").addEventListener("click", closeModal);
     el.modal.addEventListener("click", ev => {
       if (ev.target === el.modal) closeModal();
     });
+    if (window.ResizeObserver) {
+      const chatRO = new ResizeObserver(() => scrollChatToEnd(false));
+      chatRO.observe(el.chat);
+    }
 
     el.modalBody.addEventListener("click", onModalClick);
     el.modalBody.addEventListener("input", ev => {
@@ -2695,7 +3126,7 @@ if (m.kind === "pat") {
       }
     });
     document.addEventListener("click", ev => {
-      if (menuEl && !menuEl.contains(ev.target)) closeMenu();
+      if (menuEl && !menuEl.contains(ev.target) && Date.now() - menuOpenedAt > 300) closeMenu();
     });
     window.addEventListener("beforeunload", () => Store.save());
     document.addEventListener("visibilitychange", () => {
@@ -3408,6 +3839,73 @@ if (m.kind === "pat") {
     } else if (a === "letterBack") {
       letterView = null;
       renderLetterPanel();
+    } else if (a === "datesClose") {
+      closeModal();
+    } else if (a === "dateAdd") {
+      dateForm = { id: null, title: "", date: "" };
+      dateType = "anniv";
+      renderDates();
+    } else if (a === "dateBack") {
+      dateForm = null;
+      renderDates();
+    } else if (a === "dateType") {
+      dateType = act.dataset.dateType === "countdown" ? "countdown" : "anniv";
+      renderDates();
+    } else if (a === "dateSave") {
+      saveDate();
+    } else if (a === "dateDel") {
+      const id = act.dataset.dateDel;
+      const d = (state.dates || []).filter(x => x.id === id)[0];
+      if (!d) return;
+      if (!confirm("删除「" + d.title + "」？")) return;
+      state.dates = state.dates.filter(x => x.id !== id);
+      persist();
+      renderDates();
+      toast("已删除");
+    } else if (a === "quizClose") {
+      closeModal();
+    } else if (a === "quizAdd") {
+      quizForm = true;
+      quizDraft = { question: "", options: ["", ""] };
+      renderQuiz();
+    } else if (a === "quizBack") {
+      quizForm = null;
+      quizDraft = null;
+      renderQuiz();
+    } else if (a === "quizOptAdd") {
+      const inputs = $$("#modalBody [data-qopt]");
+      const vals = inputs.map(i => i.value);
+      if (vals.length >= 8) {
+        toast("最多 8 个选项");
+        return;
+      }
+      vals.push("");
+      quizDraft = { question: ($("#quizQ") ? $("#quizQ").value : "").trim(), options: vals };
+      renderQuiz();
+    } else if (a === "quizOptDel") {
+      const idx = Number(act.dataset.opt);
+      const inputs = $$("#modalBody [data-qopt]");
+      const vals = inputs.map(i => i.value);
+      const q = ($("#quizQ") ? $("#quizQ").value : "").trim();
+      if (vals.length <= 2) {
+        toast("至少保留 2 个选项");
+        return;
+      }
+      vals.splice(idx, 1);
+      quizDraft = { question: q, options: vals };
+      renderQuiz();
+    } else if (a === "quizSave") {
+      saveQuiz();
+    } else if (a === "quizDel") {
+      const id = act.dataset.quizDel;
+      const q = (state.quizzes || []).filter(x => x.id === id)[0];
+      if (!q) return;
+      if (!confirm("删除这份问卷？")) return;
+      state.quizzes = state.quizzes.filter(x => x.id !== id);
+      if (state.timers.quizReplies) delete state.timers.quizReplies[id];
+      persist();
+      renderQuiz();
+      toast("已删除");
     }
   }
 
@@ -3437,6 +3935,7 @@ if (m.kind === "pat") {
       el.opening.classList.remove("fade");
     }, 520);
     el.input.focus();
+    checkImportantToday(false);
   }
 
   function buildStarfield() {
@@ -3500,6 +3999,7 @@ if (m.kind === "pat") {
     armAll();
     renderAll(true);
     showOpening();
+    if (!S().opening) setTimeout(() => checkImportantToday(false), 900);
     setInterval(checkDayRollover, 30000);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) checkDayRollover();

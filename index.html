@@ -58,6 +58,13 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
           <i class="badge" id="letterBadge" hidden>0</i>
         </button>
+        <button class="ico-btn" id="btnDates" title="重要日">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16.5" rx="3"/><path d="M8 2.5v4M16 2.5v4M3 10h18"/><path d="M12 18.6c-2.4-1.6-3.6-2.9-3.6-4.4a1.9 1.9 0 0 1 3.6-.9 1.9 1.9 0 0 1 3.6.9c0 1.5-1.2 2.8-3.6 4.4z"/></svg>
+        </button>
+        <button class="ico-btn" id="btnQuiz" title="问卷">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="4" width="15" height="17" rx="2.5"/><path d="M9.5 4V2.8h5V4"/><path d="m8.4 12.2 1.7 1.7 3.3-3.4"/><path d="m8.4 17 1.7 1.7 3.3-3.4"/></svg>
+          <i class="badge" id="quizBadge" hidden>0</i>
+        </button>
         <button class="ico-btn" id="btnSettings" title="设置">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.6 14.6a1.7 1.7 0 0 0 .34 1.9l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.9-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.56 1.7 1.7 0 0 0-1.9.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.9 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.56-1.1 1.7 1.7 0 0 0-.34-1.9l-.06-.06A2 2 0 1 1 7.09 4.7l.06.06a1.7 1.7 0 0 0 1.9.34H9.1a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.9-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.9v.08a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.56 1.03z"/></svg>
         </button>
@@ -183,7 +190,16 @@
   <button class="bb-hang" id="bubbleHang" title="挂断">✕</button>
 </div>
 
-<div class="today-popup" id="todayPopup" hidden>
+    <div class="mini-notice" id="miniNotice" hidden>
+      <div class="mn-ico" id="mnIco">📋</div>
+      <div class="mn-body">
+        <b id="mnTitle"></b>
+        <span id="mnBody"></span>
+      </div>
+      <button class="mn-x" id="mnClose" title="关闭">✕</button>
+    </div>
+
+    <div class="today-popup" id="todayPopup" hidden>
   <div class="tp-card">
     <div class="tp-date" id="todayDate"></div>
     <div class="tp-emo" id="todayEmo">🌙</div>

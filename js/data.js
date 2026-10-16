@@ -208,6 +208,25 @@ const EMOJI_GROUPS = {
     "现在不方便说话，等会儿找你"
   ];
 
+  const QUIZ_COMMENTS = [
+    "我想了很久才选的，不许笑我",
+    "这个答案很像我吧",
+    "选完之后又有点后悔了",
+    "你猜得没错，就是这个",
+    "因为这是我一直想说的",
+    "别问我为什么，我也不知道",
+    "认真想了三十秒的答案",
+    "如果是你的话，应该也会这么选吧"
+  ];
+
+  const QUIZ_SKIP_LINES = [
+    "这个问题我不回答",
+    "让我想想……先跳过",
+    "有些问题我答不了",
+    "我不选了，别逼我",
+    "这个问题有点难为情"
+  ];
+
   const FAVICON_LIST = [
     { id: "moon", name: "月亮", bg: "#2b2030", fg: "🌙" },
     { id: "sakura", name: "樱花", bg: "#e79bb4", fg: "🌸" },
@@ -261,6 +280,8 @@ const EMOJI_GROUPS = {
     FONTS: FONTS,
     LETTER_TITLES: LETTER_TITLES,
     DECLINE_LINES: DECLINE_LINES,
+    QUIZ_COMMENTS: QUIZ_COMMENTS,
+    QUIZ_SKIP_LINES: QUIZ_SKIP_LINES,
     FAVICONS: FAVICON_LIST,
     KAOMOJI: KAOMOJI
   };
