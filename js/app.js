@@ -942,7 +942,7 @@ if (m.kind === "pat") {
     const letter = {
       id: uid(),
       dir: "in",
-      title: "回信 · " + (l.title || "未命名"),
+      title: "一条来自" + state.peer.name + "的讯息请查收",
       content: buildLetterText(),
       ts: Date.now(),
       read: false
@@ -1004,28 +1004,37 @@ if (m.kind === "pat") {
     const s = S();
     if (s.combine) {
       const n = randInt(s.combineMin, Math.max(s.combineMin, s.combineMax));
-      const per = randInt(1, Math.max(1, s.combinePerMax != null ? s.combinePerMax : 2));
-      const sentences = [];
-      for (let i = 0; i < n; i++) sentences.push(pickCards(per).join(""));
-      return sentences.join(" ");
+      return pickCards(n).join(" ");
     }
     const n = Math.random() < 0.22 ? 2 : 1;
     return pickCards(n).join("");
   }
 
   function joinLetterParts(list) {
-    let t = list[0] || "";
-    for (let i = 1; i < list.length; i++) t += (Math.random() < 0.35 ? "。" : "，") + list[i];
+    const END = /[。！？…~，、,!?]$/;
+    let t = "";
+    list.forEach((raw, i) => {
+      const card = String(raw == null ? "" : raw).trim();
+      if (!card) return;
+      if (!t) {
+        t = card;
+        return;
+      }
+      t += END.test(t) ? card : (Math.random() < 0.35 ? "。" : "，") + card;
+    });
     t = t.trim();
+    if (!t) return "……";
     if (!/[。！？…~]$/.test(t)) t += "。";
     return t;
   }
 
   function buildLetterText() {
     const s = S();
-    const n = randInt(s.letterSentMin, Math.max(s.letterSentMin, s.letterSentMax));
+    const mn = clamp(Math.round(s.letterSentMin || 1), 1, 30);
+    const mx = clamp(Math.round(s.letterSentMax || mn), mn, 30);
+    const n = randInt(mn, mx);
     const parts = [];
-    for (let i = 0; i < n; i++) parts.push(pickCards(randInt(1, 3)).join(""));
+    for (let i = 0; i < n; i++) parts.push(pickCards(1)[0]);
     const brk = Math.random() < (s.letterBreakChance != null ? s.letterBreakChance : 0.6);
     if (!brk) return joinLetterParts(parts);
     const per = randInt(1, Math.max(1, s.letterParaMax != null ? s.letterParaMax : 2));
@@ -1123,7 +1132,7 @@ if (m.kind === "pat") {
   /* ===================== 写信 ===================== */
 
   function aiWriteLetter() {
-    const title = pickOne(DATA.LETTER_TITLES);
+    const title = "一条来自" + state.peer.name + "的讯息请查收";
     const letter = {
       id: uid(),
       dir: "in",
@@ -1471,12 +1480,11 @@ if (m.kind === "pat") {
       '<div class="note">不是每条消息都会回复，75% 的概率触发。</div>' +
       sw("autoScroll", "新消息自动定位到最新") +
       '<div class="note">关掉后聊天不会自动下滑；你翻上去看历史时也不会被拉回底部。</div>' +
-      sw("combine", "拼字卡（随机拼接）") +
-      '<div class="field"><label>拼接句数（1 ~ 10 句）</label><div class="pair">' +
+      sw("combine", "拼字卡（把多张字卡合成一条消息）") +
+      '<div class="field"><label>每次回复的字卡数量（1 ~ 10 张，卡片之间用空格隔开）</label><div class="pair">' +
       num("combineMin", "最少", 1, 10) +
       num("combineMax", "最多", 1, 10) +
       "</div></div>" +
-      num("combinePerMax", "每条最多卡片（1 ~ 3 张）", 1, 3) +
       rng("patChance", "梦角主动拍一拍概率", 0, 100, "pct") +
       rng("patReplyChance", "我拍一拍后梦角用拍一拍语回应", 0, 100, "pct") +
       rng("quoteChance", "回复时引用你消息的概率", 0, 100, "pct") +
@@ -1542,7 +1550,7 @@ if (m.kind === "pat") {
       num("letterReplyMin", "最短", 0.1, 720) +
       num("letterReplyMax", "最长", 0.1, 720) +
       "</div></div>" +
-      '<div class="field"><label>回信句数（1 ~ 30 句，内容来自字卡库随机抽取）</label><div class="pair">' +
+      '<div class="field"><label>每封信的总句数（1 ~ 30 句，字卡逐张抽取，每张之间用「，」「。」隔开）</label><div class="pair">' +
       num("letterSentMin", "最少", 1, 30) +
       num("letterSentMax", "最多", 1, 30) +
       "</div></div>" +
