@@ -1315,6 +1315,246 @@ if (m.kind === "pat") {
     setTimeout(() => URL.revokeObjectURL(a.href), 3000);
   }
 
+  /* ===================== 字卡文件导入 ===================== */
+
+  function readFileTextSmart(file) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onerror = () => reject(new Error("文件读取失败"));
+      fr.onload = () => {
+        const buf = fr.result;
+        let text = new TextDecoder("utf-8").decode(buf);
+        if (text.indexOf("\uFFFD") >= 0) {
+          try {
+            text = new TextDecoder("gbk").decode(buf);
+          } catch (e) {}
+        }
+        resolve(text.replace(/^\uFEFF/, ""));
+      };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
+  function parseTextEntries(text) {
+    const out = [];
+    let cur = "";
+    String(text)
+      .replace(/^\uFEFF/, "")
+      .split(/\r?\n/)
+      .forEach(line => {
+        const t = line.trim();
+        if (!t) return;
+        const m = t.match(/^[\[【](.{1,20})[\]】]$/);
+        if (m) {
+          cur = m[1].trim();
+          return;
+        }
+        out.push({ text: t, groupName: cur });
+      });
+    return out;
+  }
+
+  function parseJsonCards(data) {
+    const out = [];
+    const pushCard = (item, groupName) => {
+      if (item == null) return;
+      if (typeof item === "string" || typeof item === "number") {
+        out.push({ text: String(item), groupName: groupName || "" });
+        return;
+      }
+      if (typeof item === "object") {
+        const text = item.text != null ? item.text : item.card != null ? item.card : item.content != null ? item.content : item.value;
+        if (text == null) return;
+        const g = item.groupName || item.group || item.g || groupName || "";
+        out.push({ text: String(text), groupName: typeof g === "string" ? g : "" });
+      }
+    };
+    const pushGroup = g => {
+      if (!g || typeof g !== "object") return;
+      const name = g.name || g.groupName || g.title || g.group || "";
+      const list = g.cards || g.list || g.items || g.data || g.children || [];
+      if (Array.isArray(list)) list.forEach(c => pushCard(c, name));
+    };
+    if (Array.isArray(data)) {
+      const looksGrouped = data.some(
+        x => x && typeof x === "object" && !Array.isArray(x) && (Array.isArray(x.cards) || Array.isArray(x.list) || Array.isArray(x.items) || Array.isArray(x.data))
+      );
+      if (looksGrouped) data.forEach(pushGroup);
+      else data.forEach(c => pushCard(c, ""));
+      return out;
+    }
+    if (data && typeof data === "object") {
+      if (Array.isArray(data.groups)) {
+        data.groups.forEach(pushGroup);
+        return out;
+      }
+      if (Array.isArray(data.cards)) {
+        data.cards.forEach(c => pushCard(c, ""));
+        return out;
+      }
+      Object.keys(data).forEach(k => {
+        const v = data[k];
+        if (Array.isArray(v)) v.forEach(c => pushCard(c, k));
+        else if (typeof v === "string") pushCard(v, k);
+      });
+    }
+    return out;
+  }
+
+  function findZipEntry(buf, name) {
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 66000); i--) {
+      if (dv.getUint32(i, true) === 0x06054b50) {
+        eocd = i;
+        break;
+      }
+    }
+    if (eocd < 0) return null;
+    const count = dv.getUint16(eocd + 10, true);
+    let off = dv.getUint32(eocd + 16, true);
+    for (let i = 0; i < count; i++) {
+      if (off + 46 > buf.length || dv.getUint32(off, true) !== 0x02014b50) return null;
+      const method = dv.getUint16(off + 10, true);
+      const compSize = dv.getUint32(off + 20, true);
+      const nameLen = dv.getUint16(off + 28, true);
+      const extraLen = dv.getUint16(off + 30, true);
+      const commentLen = dv.getUint16(off + 32, true);
+      const localOff = dv.getUint32(off + 42, true);
+      const nm = new TextDecoder("utf-8").decode(buf.subarray(off + 46, off + 46 + nameLen));
+      if (nm === name) {
+        if (localOff + 30 > buf.length || dv.getUint32(localOff, true) !== 0x04034b50) return null;
+        const lNameLen = dv.getUint16(localOff + 26, true);
+        const lExtraLen = dv.getUint16(localOff + 28, true);
+        const start = localOff + 30 + lNameLen + lExtraLen;
+        return { method: method, data: buf.subarray(start, start + compSize) };
+      }
+      off += 46 + nameLen + extraLen + commentLen;
+    }
+    return null;
+  }
+
+  async function inflateRaw(bytes) {
+    if (typeof DecompressionStream === "undefined") throw new Error("当前浏览器不支持解析 docx，请改用 txt 或 json");
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+
+  function xmlUnescape(s) {
+    return String(s)
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(Number(d)))
+      .replace(/&#x([0-9a-fA-F]+);/g, (m, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/&amp;/g, "&");
+  }
+
+  async function readDocxLines(file) {
+    const buf = new Uint8Array(await new Promise((res, rej) => {
+      const fr = new FileReader();
+      fr.onerror = () => rej(new Error("文件读取失败"));
+      fr.onload = () => res(new Uint8Array(fr.result));
+      fr.readAsArrayBuffer(file);
+    }));
+    const entry = findZipEntry(buf, "word/document.xml");
+    if (!entry) throw new Error("这不是有效的 docx 文件（或已损坏）");
+    let bytes = entry.data;
+    if (entry.method === 8) bytes = await inflateRaw(bytes);
+    else if (entry.method !== 0) throw new Error("暂不支持这种 docx 压缩方式");
+    const xml = new TextDecoder("utf-8").decode(bytes);
+    const lines = [];
+    xml.split(/<\/w:p>/).forEach(chunk => {
+      const part = chunk
+        .replace(/<w:br\b[^>]*\/?>/g, "\n")
+        .replace(/<w:tab\b[^>]*\/?>/g, " ");
+      let line = "";
+      const re = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>/g;
+      let m;
+      while ((m = re.exec(part))) line += xmlUnescape(m[1]);
+      line
+        .split(/\r?\n/)
+        .map(t => t.trim())
+        .filter(Boolean)
+        .forEach(t => lines.push(t));
+    });
+    return lines;
+  }
+
+  function addCardEntries(entries) {
+    const have = new Set(state.cards.map(cardText));
+    let added = 0;
+    let dup = 0;
+    let groupsMade = 0;
+    const resolve = raw => {
+      const key = String(raw == null ? "" : raw).trim();
+      if (!key) return addGroup || "none";
+      const byName = state.groups.filter(g => g.name === key)[0];
+      if (byName) return byName.id;
+      const byId = state.groups.filter(g => g.id === key)[0];
+      if (byId) return byId.id;
+      const id = "g_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+      state.groups.push({ id: id, name: key.slice(0, 20) });
+      groupsMade++;
+      return id;
+    };
+    (entries || []).forEach(e => {
+      const text = String(e && e.text != null ? e.text : "").trim();
+      if (!text) return;
+      if (have.has(text)) {
+        dup++;
+        return;
+      }
+      have.add(text);
+      state.cards.push({ text: text.slice(0, 120), group: resolve(e.groupName) });
+      added++;
+    });
+    persist();
+    return { added: added, dup: dup, groups: groupsMade };
+  }
+
+  async function importCardFile() {
+    const file = await pickFile(".txt,.docx,.json,.md,text/plain,application/json");
+    if (!file) return;
+    const st = $("#addStatus");
+    if (st) {
+      st.classList.remove("done");
+      st.textContent = "正在读取 " + file.name + "…";
+    }
+    try {
+      const name = String(file.name || "").toLowerCase();
+      let entries = [];
+      if (/\.docx$/.test(name)) {
+        const lines = await readDocxLines(file);
+        entries = lines.map(t => ({ text: t, groupName: "" }));
+      } else if (/\.json$/.test(name)) {
+        entries = parseJsonCards(JSON.parse(await readFileTextSmart(file)));
+      } else if (/\.doc$/.test(name)) {
+        throw new Error("暂不支持 .doc，请用 Word 另存为 .docx");
+      } else {
+        entries = parseTextEntries(await readFileTextSmart(file));
+      }
+      if (!entries.length) throw new Error("没有读到可用的内容");
+      const res = addCardEntries(entries);
+      renderCardList();
+      syncSettingUI();
+      const msg =
+        "导入 " + file.name + "：新增 " + res.added + " 条" +
+        (res.dup ? "，跳过重复 " + res.dup + " 条" : "") +
+        (res.groups ? "，新建分组 " + res.groups + " 个" : "");
+      if (st) {
+        st.classList.add("done");
+        st.textContent = msg;
+      }
+      toast("导入完成，新增 " + res.added + " 条");
+    } catch (err) {
+      const msg = "导入失败：" + (err && err.message ? err.message : "无法解析该文件");
+      if (st) st.textContent = msg;
+      toast(msg);
+    }
+  }
+
   /* ===================== 图片处理 ===================== */
 
   function readImage(file, maxSize, quality) {
@@ -1581,6 +1821,7 @@ if (m.kind === "pat") {
       "</div>" +
       '<textarea id="cardInput" placeholder="在这里粘贴字卡，一行一条，重复的会自动跳过"></textarea>' +
       '<div class="list-tools" style="margin-top:10px">' +
+      '<button class="btn tiny" data-act="importFile">导入文件</button>' +
       '<button class="btn tiny" data-act="importAdd">导入添加（去重）</button>' +
       '<button class="btn tiny ghost" data-act="importReplace">覆盖导入</button>' +
       '<button class="btn tiny ghost" data-act="exportCards">导出为 txt</button>' +
@@ -1589,6 +1830,7 @@ if (m.kind === "pat") {
       "</div>" +
       '<div class="status-line" id="addStatus"></div>' +
       '<div class="note">批量导入自动按行分条、去重后加入所选分组；不选分组时默认进入「未分组」。</div>' +
+      '<div class="note">「导入文件」支持 txt / docx / json：txt 一行一张卡（行首 [分组名] 可切换分组）；docx 按段落取文字；json 支持 {"groups":[{"name":"分组","cards":["卡"]}]}、[{"name":"分组","cards":[...]}]、{"分组":["卡"]} 等写法，新分组自动创建，同名分组直接并入原分组。</div>' +
       '<div class="grp-bar" style="margin-top:6px">' +
       state.groups
         .filter(g => g.id !== "none")
@@ -3615,6 +3857,8 @@ if (m.kind === "pat") {
       openSettings(setTab);
       rescheduleAll();
       toast("已恢复默认");
+    } else if (a === "importFile") {
+      importCardFile();
     } else if (a === "importAdd" || a === "importReplace") {
       const ta = $("#cardInput");
       if (!ta.value.trim()) {
