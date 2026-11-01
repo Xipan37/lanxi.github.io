@@ -59,6 +59,9 @@
   let dateType = "anniv";
   let quizForm = null;
   let quizDraft = null;
+  const atmPick = { opening: {}, pat: {} };
+  const atmBatch = { opening: false, pat: false };
+  let atmEdit = null;
   let emojiFilter = "";
   let cardSearch = "";
   let cardGroup = "all";
@@ -1855,25 +1858,38 @@ if (m.kind === "pat") {
       '<div id="cardList" style="margin-top:6px"></div>' +
       "</div>";
 
+    const atmoBlock = (kind, title, hint) => {
+      const list = state.atmo[kind] || [];
+      const batch = atmBatch[kind];
+      const picked = Object.keys(atmPick[kind]).filter(k => atmPick[kind][k]).length;
+      return (
+        '<div class="atm-block">' +
+        '<div class="row" style="margin-bottom:4px"><b style="font-size:.94em">' + title + "</b>" +
+        '<span class="count-pill" style="margin-left:auto">' + list.length + " 条</span></div>" +
+        '<div class="note" style="margin:0 0 8px">' + hint + "</div>" +
+        '<div class="list-tools">' +
+        '<button class="btn tiny ' + (batch ? "" : "ghost") + '" data-act="atmBatch" data-atm="' + kind + '">' + (batch ? "退出批量管理" : "批量管理") + "</button>" +
+        '<button class="btn tiny ghost" data-act="atmPickAll" data-atm="' + kind + '">全选</button>' +
+        '<button class="btn tiny danger" data-act="atmBatchDel" data-atm="' + kind + '">批量删除</button>' +
+        '<button class="btn tiny ghost" data-act="atmBulk" data-atm="' + kind + '">批量添加</button>' +
+        '<button class="btn tiny ghost" data-act="atmReset" data-atm="' + kind + '">恢复默认</button>' +
+        '<button class="btn tiny ghost" data-act="atmPreview" data-atm="' + kind + '">预览</button>' +
+        (batch ? '<span class="hint">已选 ' + picked + " 条</span>" : "") +
+        "</div>" +
+        '<div class="atm-add"><input type="text" id="atmInput-' + kind + '" maxlength="60" placeholder="输入一条新的' + title + '…">' +
+        '<button class="btn tiny" data-act="atmAdd" data-atm="' + kind + '">添加</button></div>' +
+        '<div id="atmList-' + kind + '"></div>' +
+        "</div>"
+      );
+    };
+
     const moodPanel =
       '<div class="card-box">' +
       '<div class="row"><span class="count-pill">开场动画文案 ' + state.atmo.opening.length + " 条</span>" +
       '<span class="count-pill">拍一拍文案 ' + state.atmo.pat.length + " 条</span></div>" +
-      '<div class="field"><label>开场动画内容（每行一条，随机显示）</label>' +
-      '<textarea id="atmOpening">' + esc(state.atmo.opening.join("\n")) + "</textarea>" +
-      '<div class="list-tools" style="margin-top:8px">' +
-      '<button class="btn tiny" data-act="saveAtmoOpening">保存开场文案</button>' +
-      '<button class="btn tiny ghost" data-act="resetAtmoOpening">恢复默认</button>' +
-      '<button class="btn tiny ghost" data-act="previewOpening">预览</button>' +
-      "</div></div>" +
-      '<div class="field"><label>拍一拍内容（每行一条，随机显示在【】里）</label>' +
-      '<textarea id="atmPat">' + esc(state.atmo.pat.join("\n")) + "</textarea>" +
-      '<div class="list-tools" style="margin-top:8px">' +
-      '<button class="btn tiny" data-act="saveAtmoPat">保存拍一拍文案</button>' +
-      '<button class="btn tiny ghost" data-act="resetAtmoPat">恢复默认</button>' +
-      '<button class="btn tiny ghost" data-act="previewPat">预览</button>' +
-      "</div></div>" +
-      '<div class="list-tools"><button class="btn ghost tiny" data-act="openDecor">拍一拍样式（符号 / 动作）</button>' +
+      atmoBlock("opening", "开场动画文案", "每行一条，开场时随机显示") +
+      atmoBlock("pat", "拍一拍文案", "每行一条，随机显示在【】里") +
+      '<div class="list-tools" style="margin-top:14px"><button class="btn ghost tiny" data-act="openDecor">拍一拍样式（符号 / 动作）</button>' +
       '<button class="btn ghost tiny" data-act="previewOpening">预览开场动画</button></div>' +
       '<div class="note">拍一拍会显示为：—— 符号 昵称 【文案】 符号 ——</div>' +
       "</div>";
@@ -2034,11 +2050,211 @@ if (m.kind === "pat") {
     openModal("设置", settingsHTML());
     syncSettingUI();
     if (setTab === "cards") renderCardList();
+    if (setTab === "mood") {
+      renderAtmoList("opening");
+      renderAtmoList("pat");
+    }
     if (setTab === "emoji") {
       renderEmojiMgr();
       renderStickerMgr();
     }
     bindSteppers();
+  }
+
+  function renderAtmoList(kind) {
+    const box = $("#atmList-" + kind);
+    if (!box) return;
+    const list = state.atmo[kind] || [];
+    const editing = atmEdit && atmEdit.kind === kind ? atmEdit.idx : -1;
+    const batch = atmBatch[kind];
+    box.innerHTML = list.length
+      ? list
+          .map((t, i) => {
+            if (i === editing) {
+              return (
+                '<div class="card-row sel">' +
+                '<div class="card-edit"><input type="text" id="atmEditInput" value="' + esc(t) + '" maxlength="60">' +
+                '<button class="btn tiny" data-act="atmSave" data-atm="' + kind + '">保存</button>' +
+                '<button class="btn tiny ghost" data-act="atmCancel" data-atm="' + kind + '">取消</button></div></div>'
+              );
+            }
+            return (
+              '<div class="card-row' + (atmPick[kind][i] ? " sel" : "") + '">' +
+              (batch ? '<button class="pick-box' + (atmPick[kind][i] ? " on" : "") + '" data-atm-pick="' + i + '" data-atm="' + kind + '">' + (atmPick[kind][i] ? "✓" : "") + "</button>" : "") +
+              '<span class="ct">' + esc(t) + "</span>" +
+              '<button class="btn tiny ghost" data-act="atmEdit" data-atm="' + kind + '" data-idx="' + i + '">编辑</button>' +
+              '<button class="btn tiny ghost" data-act="atmDelOne" data-atm="' + kind + '" data-idx="' + i + '">删</button>' +
+              "</div>"
+            );
+          })
+          .join("")
+      : '<div class="empty">还没有内容，添加一条试试</div>';
+  }
+
+  function atmoTitle(kind) {
+    return kind === "pat" ? "拍一拍文案" : "开场文案";
+  }
+
+  function openAtmoBulk(kind) {
+    openModal(
+      "批量添加" + atmoTitle(kind),
+      '<div class="card-box"><div class="field"><label>每行一条，重复的会自动跳过</label>' +
+        '<textarea id="atmBulkInput" placeholder="一行一条"></textarea></div></div>' +
+        '<button class="btn primary block" data-act="atmBulkSave" data-atm="' + kind + '">添加</button>' +
+        '<div class="list-tools" style="margin-top:10px"><button class="btn tiny ghost" data-act="atmBulkBack" data-atm="' + kind + '">返回列表</button></div>'
+    );
+  }
+
+  function handleAtmoSave(kind) {
+    const inp = $("#atmEditInput");
+    const v = inp ? inp.value.trim() : "";
+    if (!v) {
+      toast("内容不能为空");
+      return;
+    }
+    if (!atmEdit) return;
+    state.atmo[kind][atmEdit.idx] = v;
+    atmEdit = null;
+    persist();
+    openSettings(setTab);
+    toast("已保存");
+  }
+
+  function handleAtmoAction(a, act) {
+    const kind = act.dataset.atm === "pat" ? "pat" : "opening";
+    const list = state.atmo[kind] || (state.atmo[kind] = []);
+    if (a === "atmBatch") {
+      atmBatch[kind] = !atmBatch[kind];
+      atmPick[kind] = {};
+      atmEdit = null;
+      openSettings(setTab);
+    } else if (a === "atmPickAll") {
+      atmBatch[kind] = true;
+      list.forEach((_, i) => (atmPick[kind][i] = true));
+      openSettings(setTab);
+    } else if (a === "atmBatchDel") {
+      if (!atmBatch[kind]) {
+        toast("先点「批量管理」再勾选");
+        return;
+      }
+      const picked = Object.keys(atmPick[kind])
+        .filter(k => atmPick[kind][k])
+        .map(Number);
+      if (!picked.length) {
+        toast("先勾选要删除的条目");
+        return;
+      }
+      if (!confirm("删除选中的 " + picked.length + " 条" + atmoTitle(kind) + "？")) return;
+      picked
+        .sort((x, y) => y - x)
+        .forEach(i => list.splice(i, 1));
+      atmPick[kind] = {};
+      atmEdit = null;
+      persist();
+      openSettings(setTab);
+      toast("已删除 " + picked.length + " 条");
+    } else if (a === "atmAdd") {
+      const inp = $("#atmInput-" + kind);
+      const v = inp ? inp.value.trim() : "";
+      if (!v) {
+        toast("写点什么吧~");
+        return;
+      }
+      list.push(v);
+      atmEdit = null;
+      persist();
+      openSettings(setTab);
+      toast("已添加");
+    } else if (a === "atmBulk") {
+      openAtmoBulk(kind);
+    } else if (a === "atmBulkBack") {
+      openSettings("mood");
+    } else if (a === "atmBulkSave") {
+      const ta = $("#atmBulkInput");
+      const lines = (ta ? ta.value : "")
+        .split(/\r?\n/)
+        .map(l => l.trim())
+        .filter(Boolean);
+      if (!lines.length) {
+        toast("先粘贴一些内容");
+        return;
+      }
+      let added = 0;
+      let dup = 0;
+      lines.forEach(l => {
+        if (list.indexOf(l) >= 0) dup++;
+        else {
+          list.push(l);
+          added++;
+        }
+      });
+      atmEdit = null;
+      persist();
+      openSettings("mood");
+      toast("新增 " + added + " 条" + (dup ? "，跳过重复 " + dup + " 条" : ""));
+    } else if (a === "atmReset") {
+      if (!confirm("恢复默认" + atmoTitle(kind) + "？自定义内容会被覆盖")) return;
+      state.atmo[kind] = kind === "pat" ? (DATA.DEFAULT_PAT || DATA.DEFAULT_ATMOSPHERE).slice() : Store.defaultAtmosphere();
+      atmPick[kind] = {};
+      atmEdit = null;
+      persist();
+      openSettings(setTab);
+      toast("已恢复默认");
+    } else if (a === "atmPreview") {
+      if (kind === "pat") {
+        doUserPat();
+        closeModal();
+        return;
+      }
+      previewOpening();
+    } else if (a === "atmEdit") {
+      atmEdit = { kind: kind, idx: Number(act.dataset.idx) };
+      renderAtmoList(kind);
+      setTimeout(() => {
+        const i = $("#atmEditInput");
+        if (!i) return;
+        i.focus();
+        i.setSelectionRange(i.value.length, i.value.length);
+        i.onkeydown = ev => {
+          if (ev.key === "Enter") handleAtmoSave(kind);
+          if (ev.key === "Escape") {
+            atmEdit = null;
+            openSettings(setTab);
+          }
+        };
+      }, 30);
+    } else if (a === "atmSave") {
+      handleAtmoSave(kind);
+    } else if (a === "atmCancel") {
+      atmEdit = null;
+      openSettings(setTab);
+    } else if (a === "atmDelOne") {
+      const idx = Number(act.dataset.idx);
+      list.splice(idx, 1);
+      atmEdit = null;
+      persist();
+      openSettings(setTab);
+    }
+  }
+
+  function previewOpening() {
+    el.openingText.textContent = openingLine();
+    el.openingSub.textContent = "给 " + state.peer.name + " 的字卡传讯 · " + fmtDate(Date.now());
+    el.opening.classList.remove("fade");
+    el.opening.hidden = false;
+    closeModal();
+    const back = () => openSettings(setTab);
+    const close = ev => {
+      if (ev) ev.stopPropagation();
+      el.opening.classList.add("fade");
+      setTimeout(() => {
+        el.opening.hidden = true;
+        el.opening.classList.remove("fade");
+        back();
+      }, 520);
+    };
+    el.openingEnter.onclick = close;
+    el.opening.onclick = () => close();
   }
 
   let stepTimer = null;
@@ -2795,7 +3011,7 @@ if (m.kind === "pat") {
   /* ---------- 裁剪 ---------- */
   let cropper = null;
 
-  function cropImage(file, maxSize, quality) {
+  function cropImage(file, maxSize, quality, opts) {
     return new Promise(resolve => {
       const fr = new FileReader();
       fr.onerror = () => resolve(null);
@@ -2803,7 +3019,7 @@ if (m.kind === "pat") {
         const img = new Image();
         img.onerror = () => resolve(null);
         img.onload = () => {
-          openCropper(img, maxSize, quality, resolve);
+          openCropper(img, maxSize, quality, resolve, opts || {});
         };
         img.src = fr.result;
       };
@@ -2811,15 +3027,34 @@ if (m.kind === "pat") {
     });
   }
 
-  function openCropper(img, maxSize, quality, done) {
+  function openCropper(img, maxSize, quality, done, opts) {
+    const shape = opts.shape === "circle" ? "circle" : "rect";
     const overlay = el.cropper;
     const stage = el.cropStage;
     const rect = el.cropRect;
     const holder = el.cropImg;
+    const circle = $("#cropCircle");
+    const ratios = $("#cropRatios");
+    const titleEl = $("#cropTitle");
     holder.src = img.src;
+    holder.style.transform = "";
+    holder.style.marginLeft = "";
+    holder.style.marginTop = "";
     overlay.hidden = false;
-    const stageBox = { w: 0, h: 0 };
+    overlay.classList.toggle("circle-mode", shape === "circle");
+    stage.classList.toggle("cm", shape === "circle");
+    rect.hidden = shape === "circle";
+    if (circle) circle.hidden = shape !== "circle";
+    if (ratios) ratios.style.display = shape === "circle" ? "none" : "";
+    if (titleEl) titleEl.textContent = shape === "circle" ? "移动和缩放（双指缩放 / 拖动）" : "划定截取范围";
+    el.cropOk.textContent = shape === "circle" ? "完成" : "确定截取";
+
     setTimeout(() => {
+      if (shape === "circle") initCircle();
+      else initRect();
+    }, 20);
+
+    function initRect() {
       const maxW = stage.clientWidth;
       const maxH = stage.clientHeight;
       const r = Math.min(maxW / img.width, maxH / img.height, 1);
@@ -2827,69 +3062,86 @@ if (m.kind === "pat") {
       const dh = Math.max(1, Math.round(img.height * r));
       holder.style.width = dw + "px";
       holder.style.height = dh + "px";
-      stageBox.w = dw;
-      stageBox.h = dh;
-      const norm = { x: 0.08, y: 0.08, w: 0.84, h: 0.84 };
-      cropper = { img: img, maxSize: maxSize, quality: quality, done: done, box: stageBox, norm: norm, ratio: "free", drag: null };
+      const offX = Math.max(0, (stage.clientWidth - dw) / 2);
+      const offY = Math.max(0, (stage.clientHeight - dh) / 2);
+      cropper = {
+        shape: "rect",
+        img: img,
+        maxSize: maxSize,
+        quality: quality,
+        done: done,
+        box: { x: offX, y: offY, w: dw, h: dh },
+        norm: { x: 0, y: 0, w: 1, h: 1 },
+        ratio: "full",
+        drag: null
+      };
       applyRect();
-      bindCropEvents();
-    }, 20);
+      bindRect();
+      bindRatios();
+    }
 
     function applyRect() {
       const n = cropper.norm;
-      rect.style.left = n.x * cropper.box.w + "px";
-      rect.style.top = n.y * cropper.box.h + "px";
-      rect.style.width = n.w * cropper.box.w + "px";
-      rect.style.height = n.h * cropper.box.h + "px";
+      const b = cropper.box;
+      rect.style.left = b.x + n.x * b.w + "px";
+      rect.style.top = b.y + n.y * b.h + "px";
+      rect.style.width = n.w * b.w + "px";
+      rect.style.height = n.h * b.h + "px";
     }
 
-    function bindCropEvents() {
+    function toNorm(ev) {
+      const b = cropper.box;
+      const box = stage.getBoundingClientRect();
+      return {
+        x: clamp((ev.clientX - box.left - b.x) / b.w, 0, 1),
+        y: clamp((ev.clientY - box.top - b.y) / b.h, 0, 1)
+      };
+    }
+
+    function bindRect() {
       stage.onpointerdown = ev => {
+        if (!cropper || cropper.shape !== "rect") return;
+        const p = toNorm(ev);
         const n = cropper.norm;
-        const px = (ev.clientX - stage.getBoundingClientRect().left) / cropper.box.w;
-        const py = (ev.clientY - stage.getBoundingClientRect().top) / cropper.box.h;
         const handle = ev.target.closest(".ch");
         if (handle) {
-          cropper.drag = { mode: handle.dataset.h, px: px, py: py, n: Object.assign({}, n) };
-        } else if (px >= n.x && px <= n.x + n.w && py >= n.y && py <= n.y + n.h) {
-          cropper.drag = { mode: "move", px: px, py: py, n: Object.assign({}, n) };
-        } else {
-          cropper.drag = { mode: "move", px: px, py: py, n: Object.assign({}, n), recenter: true };
+          cropper.drag = { mode: handle.dataset.h, px: p.x, py: p.y, n: Object.assign({}, n) };
+        } else if (p.x >= n.x && p.x <= n.x + n.w && p.y >= n.y && p.y <= n.y + n.h) {
+          cropper.drag = { mode: "move", px: p.x, py: p.y, n: Object.assign({}, n) };
         }
-        stage.setPointerCapture && stage.setPointerCapture(ev.pointerId);
+        if (!cropper.drag) return;
+        try { if (stage.setPointerCapture) stage.setPointerCapture(ev.pointerId); } catch (e) {}
         ev.preventDefault();
       };
       stage.onpointermove = ev => {
-        if (!cropper || !cropper.drag) return;
-        const box = stage.getBoundingClientRect();
-        const px = (ev.clientX - box.left) / cropper.box.w;
-        const py = (ev.clientY - box.top) / cropper.box.h;
+        if (!cropper || cropper.shape !== "rect" || !cropper.drag) return;
+        const p = toNorm(ev);
         const d = cropper.drag;
-        let n = Object.assign({}, d.n);
+        const n = Object.assign({}, d.n);
         if (d.mode === "move") {
-          n.x = clamp(d.n.x + (px - d.px), 0, 1 - d.n.w);
-          n.y = clamp(d.n.y + (py - d.py), 0, 1 - d.n.h);
-          if (d.recenter) {
-            n.x = clamp(px - d.n.w / 2, 0, 1 - d.n.w);
-            n.y = clamp(py - d.n.h / 2, 0, 1 - d.n.h);
-          }
+          n.x = clamp(d.n.x + (p.x - d.px), 0, 1 - d.n.w);
+          n.y = clamp(d.n.y + (p.y - d.py), 0, 1 - d.n.h);
         } else {
           const right = d.n.x + d.n.w;
           const bottom = d.n.y + d.n.h;
-          if (d.mode.indexOf("w") >= 0) n.x = Math.min(clamp(px, 0, right - 0.06), right - 0.06);
-          if (d.mode.indexOf("e") >= 0) n.w = clamp(px - d.n.x, 0.06, 1 - d.n.x);
-          if (d.mode.indexOf("n") >= 0) n.y = Math.min(clamp(py, 0, bottom - 0.06), bottom - 0.06);
-          if (d.mode.indexOf("s") >= 0) n.h = clamp(py - d.n.y, 0.06, 1 - d.n.y);
-          const ratio = cropper.ratio === "free" ? 0 : Number(cropper.ratio);
+          if (d.mode.indexOf("w") >= 0) n.x = Math.min(p.x, right - 0.04);
+          if (d.mode.indexOf("e") >= 0) n.w = clamp(p.x - n.x, 0.04, 1 - n.x);
+          if (d.mode.indexOf("n") >= 0) n.y = Math.min(p.y, bottom - 0.04);
+          if (d.mode.indexOf("s") >= 0) n.h = clamp(p.y - n.y, 0.04, 1 - n.y);
+          n.x = clamp(n.x, 0, 1);
+          n.y = clamp(n.y, 0, 1);
+          n.w = clamp(n.w, 0.04, 1 - n.x);
+          n.h = clamp(n.h, 0.04, 1 - n.y);
+          const ratio = cropper.ratio === "free" || cropper.ratio === "full" ? 0 : Number(cropper.ratio) || 0;
           if (ratio) {
             const targetH = (n.w * cropper.box.w) / (ratio * cropper.box.h);
             if (d.mode.indexOf("n") >= 0) {
-              n.y = clamp(bottom - targetH, 0, bottom - 0.06);
+              n.y = clamp(bottom - targetH, 0, bottom - 0.04);
               n.h = bottom - n.y;
             } else if (d.mode.indexOf("s") >= 0) {
-              n.h = clamp(targetH, 0.06, bottom - n.y);
+              n.h = clamp(targetH, 0.04, bottom - n.y);
             } else {
-              n.w = clamp(n.h * ratio * cropper.box.h / cropper.box.w, 0.06, right - n.x);
+              n.w = clamp((n.h * ratio * cropper.box.h) / cropper.box.w, 0.04, 1 - n.x);
             }
           }
         }
@@ -2898,38 +3150,171 @@ if (m.kind === "pat") {
         ev.preventDefault();
       };
       stage.onpointerup = stage.onpointercancel = () => {
-        if (cropper) cropper.drag = null;
+        if (cropper && cropper.shape === "rect") cropper.drag = null;
       };
     }
 
-    $$("#cropper .ratio").forEach(b => {
-      b.onclick = () => {
-        $$("#cropper .ratio").forEach(x => x.classList.remove("on"));
-        b.classList.add("on");
-        cropper.ratio = b.dataset.ratio;
-        const ratio = cropper.ratio === "free" ? 0 : Number(cropper.ratio);
-        if (ratio) {
-          let w = 0.8;
+    function bindRatios() {
+      $$("#cropper .ratio").forEach(b => {
+        b.onclick = () => {
+          if (!cropper || cropper.shape !== "rect") return;
+          $$("#cropper .ratio").forEach(x => x.classList.remove("on"));
+          b.classList.add("on");
+          cropper.ratio = b.dataset.ratio;
+          if (cropper.ratio === "full") {
+            cropper.norm = { x: 0, y: 0, w: 1, h: 1 };
+            applyRect();
+            return;
+          }
+          const ratio = cropper.ratio === "free" ? 0 : Number(cropper.ratio);
+          if (!ratio) return;
+          let w = 0.92;
           let h = (w * cropper.box.w) / (ratio * cropper.box.h);
-          if (h > 0.8) {
-            h = 0.8;
+          if (h > 0.92) {
+            h = 0.92;
             w = (h * ratio * cropper.box.h) / cropper.box.w;
           }
           cropper.norm = { x: (1 - w) / 2, y: (1 - h) / 2, w: w, h: h };
           applyRect();
-        }
+        };
+      });
+      const on = $('#cropper .ratio[data-ratio="full"]');
+      if (on) {
+        $$("#cropper .ratio").forEach(x => x.classList.remove("on"));
+        on.classList.add("on");
+      }
+    }
+
+    function initCircle() {
+      const W = stage.clientWidth;
+      const H = stage.clientHeight;
+      const r = Math.max(W / img.width, H / img.height);
+      const baseW = Math.max(1, img.width * r);
+      const baseH = Math.max(1, img.height * r);
+      holder.style.width = baseW + "px";
+      holder.style.height = baseH + "px";
+      holder.style.marginLeft = -baseW / 2 + "px";
+      holder.style.marginTop = -baseH / 2 + "px";
+      const D = Math.round(Math.min(W, H) * 0.74);
+      cropper = {
+        shape: "circle",
+        img: img,
+        maxSize: maxSize,
+        quality: quality,
+        done: done,
+        W: W,
+        H: H,
+        D: D,
+        base: { w: baseW, h: baseH },
+        sc: 1,
+        tx: 0,
+        ty: 0,
+        pts: {}
       };
-    });
+      if (circle) {
+        circle.style.width = D + "px";
+        circle.style.height = D + "px";
+      }
+      applyCircle();
+      bindCircle();
+    }
+
+    function applyCircle() {
+      const c = cropper;
+      const w = c.base.w * c.sc;
+      const h = c.base.h * c.sc;
+      const limX = Math.max(0, (w - c.D) / 2);
+      const limY = Math.max(0, (h - c.D) / 2);
+      c.tx = clamp(c.tx, -limX, limX);
+      c.ty = clamp(c.ty, -limY, limY);
+      holder.style.transform = "translate(" + c.tx + "px," + c.ty + "px) scale(" + c.sc + ")";
+    }
+
+    function ptList() {
+      return Object.keys(cropper.pts).map(k => cropper.pts[k]);
+    }
+    function dist2() {
+      const p = ptList();
+      return Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+    }
+
+    function bindCircle() {
+      stage.onpointerdown = ev => {
+        if (!cropper || cropper.shape !== "circle") return;
+        try { if (stage.setPointerCapture) stage.setPointerCapture(ev.pointerId); } catch (e) {}
+        cropper.pts[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+        const n = Object.keys(cropper.pts).length;
+        if (n === 2) {
+          cropper.pinch = { d: Math.max(1, dist2()), sc: cropper.sc };
+        } else if (n === 1) {
+          cropper.pan = { x: ev.clientX, y: ev.clientY, tx: cropper.tx, ty: cropper.ty };
+        }
+        ev.preventDefault();
+      };
+      stage.onpointermove = ev => {
+        if (!cropper || cropper.shape !== "circle" || !cropper.pts[ev.pointerId]) return;
+        cropper.pts[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
+        const n = Object.keys(cropper.pts).length;
+        if (n >= 2 && cropper.pinch) {
+          cropper.sc = clamp((cropper.pinch.sc * dist2()) / cropper.pinch.d, 1, 8);
+        } else if (n === 1 && cropper.pan) {
+          cropper.tx = cropper.pan.tx + (ev.clientX - cropper.pan.x);
+          cropper.ty = cropper.pan.ty + (ev.clientY - cropper.pan.y);
+        }
+        applyCircle();
+        ev.preventDefault();
+      };
+      stage.onpointerup = stage.onpointercancel = ev => {
+        if (!cropper || cropper.shape !== "circle") return;
+        delete cropper.pts[ev.pointerId];
+        const n = Object.keys(cropper.pts).length;
+        cropper.pinch = null;
+        const p = ptList();
+        cropper.pan = n === 1 ? { x: p[0].x, y: p[0].y, tx: cropper.tx, ty: cropper.ty } : null;
+      };
+      stage.onwheel = ev => {
+        if (!cropper || cropper.shape !== "circle") return;
+        ev.preventDefault();
+        cropper.sc = clamp(cropper.sc * Math.exp(-ev.deltaY * 0.0015), 1, 8);
+        applyCircle();
+      };
+    }
 
     el.cropOk.onclick = () => {
       const c = cropper;
+      if (!c) return;
+      const canvas = document.createElement("canvas");
+      if (c.shape === "circle") {
+        const w = c.base.w * c.sc;
+        const h = c.base.h * c.sc;
+        const left = c.W / 2 + c.tx - w / 2;
+        const top = c.H / 2 + c.ty - h / 2;
+        const cx = (c.W - c.D) / 2;
+        const cy = (c.H - c.D) / 2;
+        const k = img.width / w;
+        let sx = clamp((cx - left) * k, 0, Math.max(0, img.width - 1));
+        let sy = clamp((cy - top) * k, 0, Math.max(0, img.height - 1));
+        let sw = Math.min(c.D * k, img.width - sx);
+        let sh = Math.min(c.D * k, img.height - sy);
+        sw = Math.max(1, sw);
+        sh = Math.max(1, sh);
+        const side = Math.max(1, Math.round(Math.min(c.maxSize || 260, 512)));
+        canvas.width = side;
+        canvas.height = side;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, side, side);
+        ctx.drawImage(img, sx, sy, sw, sh, 0, 0, side, side);
+        closeCropper();
+        c.done(canvas.toDataURL("image/jpeg", c.quality || 0.88));
+        return;
+      }
       const n = c.norm;
       const sx = Math.round(n.x * img.width);
       const sy = Math.round(n.y * img.height);
       const sw = Math.max(1, Math.round(n.w * img.width));
       const sh = Math.max(1, Math.round(n.h * img.height));
       const scale = Math.min(1, (c.maxSize || 900) / Math.max(sw, sh));
-      const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(sw * scale));
       canvas.height = Math.max(1, Math.round(sh * scale));
       const ctx = canvas.getContext("2d");
@@ -2951,10 +3336,19 @@ if (m.kind === "pat") {
 
   function closeCropper() {
     el.cropper.hidden = true;
-    el.cropStage.onpointerdown = el.cropStage.onpointermove = el.cropStage.onpointerup = null;
+    el.cropper.classList.remove("circle-mode");
+    el.cropStage.classList.remove("cm");
+    el.cropStage.onpointerdown = el.cropStage.onpointermove = el.cropStage.onpointerup = el.cropStage.onpointercancel = el.cropStage.onwheel = null;
+    el.cropRect.hidden = false;
+    const circle = $("#cropCircle");
+    if (circle) circle.hidden = true;
+    const ratios = $("#cropRatios");
+    if (ratios) ratios.style.display = "";
+    el.cropImg.style.transform = "";
+    el.cropImg.style.marginLeft = "";
+    el.cropImg.style.marginTop = "";
     cropper = null;
   }
-
   async function pickImages() {
     const files = await pickFiles("image/*");
     if (!files || !files.length) return;
@@ -3613,6 +4007,21 @@ if (m.kind === "pat") {
       renderCardList();
       return;
     }
+    const ap = ev.target.closest("[data-atm-pick]");
+    if (ap) {
+      const kind = ap.dataset.atm === "pat" ? "pat" : "opening";
+      const i = Number(ap.dataset.atmPick);
+      atmPick[kind][i] = !atmPick[kind][i];
+      renderAtmoList(kind);
+      const hint = $("#atmList-" + kind);
+      if (hint) {
+        const wrap = hint.closest(".atm-block");
+        const tip = wrap ? wrap.querySelector(".hint") : null;
+        const picked = Object.keys(atmPick[kind]).filter(k => atmPick[kind][k]).length;
+        if (tip) tip.textContent = "已选 " + picked + " 条";
+      }
+      return;
+    }
     const sp = ev.target.closest("[data-sticker-pick]");
     if (sp) {
       const i = Number(sp.dataset.stickerPick);
@@ -3710,28 +4119,11 @@ if (m.kind === "pat") {
     const a = act.dataset.act;
 
     if (a === "previewOpening") {
-      el.openingText.textContent = openingLine();
-      el.openingSub.textContent = "给 " + state.peer.name + " 的字卡传讯 · " + fmtDate(Date.now());
-      el.opening.classList.remove("fade");
-      el.opening.hidden = false;
-      closeModal();
-      el.openingEnter.onclick = ev => {
-        ev.stopPropagation();
-        el.opening.classList.add("fade");
-        setTimeout(() => {
-          el.opening.hidden = true;
-          el.opening.classList.remove("fade");
-          openSettings(setTab);
-        }, 520);
-      };
-      el.opening.onclick = () => {
-        el.opening.classList.add("fade");
-        setTimeout(() => {
-          el.opening.hidden = true;
-          el.opening.classList.remove("fade");
-          openSettings(setTab);
-        }, 520);
-      };
+      previewOpening();
+      return;
+    }
+    if (a.indexOf("atm") === 0 && act.dataset.atm) {
+      handleAtmoAction(a, act);
       return;
     }
     if (a === "cardBatch") {
@@ -4087,7 +4479,7 @@ if (m.kind === "pat") {
       const file = await pickFile("image/*");
       if (!file) return;
       try {
-        const url = await cropImage(file, 260, 0.88);
+        const url = await cropImage(file, 320, 0.9, { shape: "circle" });
         if (!url) return;
         state.peer.avatar = url;
         persist();
@@ -4106,7 +4498,7 @@ if (m.kind === "pat") {
       const file = await pickFile("image/*");
       if (!file) return;
       try {
-        const url = await cropImage(file, 260, 0.88);
+        const url = await cropImage(file, 320, 0.9, { shape: "circle" });
         if (!url) return;
         state.user.avatar = url;
         persist();

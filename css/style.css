@@ -280,19 +280,27 @@ img.avatar{object-fit:cover;display:block}
 .crop-stage{position:relative;width:100%;height:min(56vh,360px);border-radius:12px;overflow:hidden;
   background:#1b1b1f;touch-action:none;user-select:none;display:flex;align-items:center;justify-content:center}
 .crop-stage img{max-width:100%;max-height:100%;display:block;pointer-events:none;-webkit-user-drag:none}
+.crop-stage.cm{cursor:move}
+.crop-stage.cm img{position:absolute;left:50%;top:50%;max-width:none;max-height:none;
+  transform-origin:50% 50%;will-change:transform}
+.crop-circle{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:50%;
+  border:2px solid rgba(255,255,255,.94);pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(8,6,10,.64),inset 0 0 0 1px rgba(0,0,0,.18);
+}
 .crop-rect{position:absolute;border:1.5px solid #fff;border-radius:2px;box-shadow:0 0 0 9999px rgba(10,8,12,.55);cursor:move}
 .crop-rect .grid-v{position:absolute;top:0;bottom:0;width:1px;background:rgba(255,255,255,.22);pointer-events:none}
 .crop-rect .grid-v.v1{left:33.33%}.crop-rect .grid-v.v2{left:66.66%}
 .crop-rect .grid-h{position:absolute;left:0;right:0;height:1px;background:rgba(255,255,255,.22);pointer-events:none}
 .crop-rect .grid-h.h1{top:33.33%}.crop-rect .grid-h.h2{top:66.66%}
 .crop-rect .ch{
-  position:absolute;width:22px;height:22px;border:2px solid #fff;border-radius:50%;background:rgba(255,255,255,.25);
-  touch-action:none;
+  position:absolute;width:26px;height:26px;border:2px solid #fff;border-radius:50%;background:rgba(255,255,255,.3);
+  touch-action:none;box-shadow:0 1px 4px rgba(0,0,0,.35);
 }
-.crop-rect .ch.nw{left:-11px;top:-11px;cursor:nwse-resize}
-.crop-rect .ch.ne{right:-11px;top:-11px;cursor:nesw-resize}
-.crop-rect .ch.sw{left:-11px;bottom:-11px;cursor:nesw-resize}
-.crop-rect .ch.se{right:-11px;bottom:-11px;cursor:nwse-resize}
+.crop-rect .ch.nw{left:-13px;top:-13px;cursor:nwse-resize}
+.crop-rect .ch.ne{right:-13px;top:-13px;cursor:nesw-resize}
+.crop-rect .ch.sw{left:-13px;bottom:-13px;cursor:nesw-resize}
+.crop-rect .ch.se{right:-13px;bottom:-13px;cursor:nwse-resize}
 .crop-ratios{display:flex;gap:8px;margin:12px 0;flex-wrap:wrap}
 .crop-ratios .ratio{padding:6px 14px;border-radius:15px;border:1px solid var(--border);background:var(--panel);font-size:.84em;color:var(--sub)}
 .crop-ratios .ratio.on{background:var(--primary);color:#fff;border-color:var(--primary)}
@@ -760,3 +768,9 @@ input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--bord
 @media (max-width:360px){.type-pick{flex-direction:column}}
 
 .gm-del.ghost{border-color:var(--border);background:var(--bg);color:var(--sub)}
+
+/* 氛围感列表 */
+.atm-block{border-top:1px solid var(--border);padding-top:12px;margin-top:12px}
+.atm-block:first-of-type{border-top:none;padding-top:0;margin-top:6px}
+.atm-add{display:flex;gap:8px;margin:8px 0 4px}
+.atm-add input{flex:1;min-width:0}

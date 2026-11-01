@@ -211,7 +211,7 @@
 
 <div class="cropper" id="cropper" hidden>
   <div class="crop-box">
-    <div class="crop-title">划定截取范围</div>
+    <div class="crop-title" id="cropTitle">划定截取范围</div>
     <div class="crop-stage" id="cropStage">
       <img id="cropImg" alt="" />
       <div class="crop-rect" id="cropRect">
@@ -222,9 +222,11 @@
         <span class="grid-v v1"></span><span class="grid-v v2"></span>
         <span class="grid-h h1"></span><span class="grid-h h2"></span>
       </div>
+      <div class="crop-circle" id="cropCircle" hidden></div>
     </div>
-    <div class="crop-ratios">
+    <div class="crop-ratios" id="cropRatios">
       <button class="ratio on" data-ratio="free">自由</button>
+      <button class="ratio" data-ratio="full">全图</button>
       <button class="ratio" data-ratio="1">1:1</button>
       <button class="ratio" data-ratio="43">4:3</button>
       <button class="ratio" data-ratio="169">16:9</button>
