@@ -640,11 +640,23 @@ input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--bord
 .grp-bar{display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
 .grp-bar::-webkit-scrollbar{display:none}
 .grp-chip{
-  flex:none;padding:6px 13px;border-radius:15px;background:var(--panel);border:1px solid var(--border);
-  font-size:.84em;color:var(--sub);white-space:nowrap;transition:.15s;
+  flex:none;display:inline-flex;align-items:center;gap:2px;padding:5px 8px 5px 6px;border-radius:15px;
+  background:var(--panel);border:1px solid var(--border);font-size:.84em;color:var(--sub);
+  white-space:nowrap;transition:.15s;cursor:pointer;
 }
+.grp-chip .gc-name{padding:0 3px;max-width:132px;overflow:hidden;text-overflow:ellipsis}
 .grp-chip.active{background:var(--primary);color:#fff;border-color:var(--primary)}
-.grp-chip .n{opacity:.6;margin-left:4px;font-size:.9em}
+.grp-chip.picked-group{box-shadow:0 0 0 2px var(--primary),0 0 0 4px var(--primary-soft)}
+.grp-chip .n{opacity:.6;margin-left:2px;font-size:.9em;padding-right:2px}
+.gc-btn{
+  flex:none;border:none;background:transparent;color:inherit;opacity:.6;font-size:.95em;
+  width:18px;height:18px;line-height:1;border-radius:9px;display:inline-flex;align-items:center;
+  justify-content:center;padding:0;
+}
+.gc-btn:active{background:rgba(0,0,0,.12)}
+.gc-del{color:#ff5a6e;opacity:.9}
+.grp-chip.active .gc-del{color:#fff}
+.grp-chip.active .gc-btn{opacity:.9}
 .grp-pick{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
 .grp-pick button{
   padding:7px 14px;border-radius:16px;border:1px solid var(--border);background:var(--panel);
@@ -746,3 +758,5 @@ input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--bord
 .mn-body span{font-size:.84em;color:var(--sub);word-break:break-all}
 .mn-x{margin-left:6px;border:none;background:none;color:var(--sub);font-size:.86em;padding:2px 4px}
 @media (max-width:360px){.type-pick{flex-direction:column}}
+
+.gm-del.ghost{border-color:var(--border);background:var(--bg);color:var(--sub)}

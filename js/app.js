@@ -1210,14 +1210,29 @@ if (m.kind === "pat") {
     return (
       '<div class="grp-bar">' +
       bar
-        .map(
-          g =>
-            '<button class="grp-chip' + (cardGroup === g.id ? " active" : "") + '" data-grp="' + esc(g.id) + '">' +
-            esc(g.name) + '<span class="n">' + (g.id === "all" ? state.cards.length : groupCount(g.id)) + "</span></button>"
-        )
+        .map(g => {
+          const isAll = g.id === "all";
+          const isNone = g.id === "none";
+          const n = isAll ? state.cards.length : groupCount(g.id);
+          const active = cardGroup === g.id;
+          return (
+            '<div class="grp-chip' + (active ? " active" : "") + (cardBatch && active && !isAll ? " picked-group" : "") + '" data-grp="' + esc(g.id) + '">' +
+            (isAll || isNone ? "" : '<button class="gc-btn gc-edit" data-act="renameGroup" data-gid="' + esc(g.id) + '" title="重命名分组">✎</button>') +
+            '<span class="gc-name">' + esc(g.name) + "</span>" +
+            '<span class="n">' + n + "</span>" +
+            (isAll || isNone ? "" : '<button class="gc-btn gc-del" data-act="delGroup" data-gid="' + esc(g.id) + '" title="只删分组，字卡移入未分组">✕</button>') +
+            "</div>"
+          );
+        })
         .join("") +
       "</div>"
     );
+  }
+
+  function groupBarRefresh() {
+    const bar = $("#modalBody .grp-bar");
+    if (!bar) return;
+    bar.outerHTML = groupBarHTML();
   }
 
   function filteredCards() {
@@ -1239,7 +1254,13 @@ if (m.kind === "pat") {
       '<button class="btn tiny ghost" data-act="cardPickAll">全选当前（' + list.length + "）</button>" +
       '<button class="btn tiny ghost" data-act="cardMoveGroup">批量移动分组</button>' +
       '<button class="btn tiny danger" data-act="cardBatchDel">批量删除</button>' +
-      '<span class="hint" id="cardPicked">已选 ' + picked + " 条</span>" +
+      '<span class="hint" id="cardPicked">' +
+      (picked
+        ? "已选 " + picked + " 条"
+        : cardBatch && cardGroup !== "all"
+        ? "未勾选时＝删除分组「" + groupName(cardGroup) + "」及内容"
+        : "已选 0 条") +
+      "</span>" +
       "</div>" +
       (list.length
         ? list
@@ -1537,15 +1558,15 @@ if (m.kind === "pat") {
       }
       if (!entries.length) throw new Error("没有读到可用的内容");
       const res = addCardEntries(entries);
-      renderCardList();
-      syncSettingUI();
       const msg =
         "导入 " + file.name + "：新增 " + res.added + " 条" +
         (res.dup ? "，跳过重复 " + res.dup + " 条" : "") +
         (res.groups ? "，新建分组 " + res.groups + " 个" : "");
-      if (st) {
-        st.classList.add("done");
-        st.textContent = msg;
+      openSettings(setTab);
+      const st2 = $("#addStatus");
+      if (st2) {
+        st2.classList.add("done");
+        st2.textContent = msg;
       }
       toast("导入完成，新增 " + res.added + " 条");
     } catch (err) {
@@ -1830,13 +1851,7 @@ if (m.kind === "pat") {
       "</div>" +
       '<div class="status-line" id="addStatus"></div>' +
       '<div class="note">批量导入自动按行分条、去重后加入所选分组；不选分组时默认进入「未分组」。</div>' +
-      '<div class="note">「导入文件」支持 txt / docx / json：txt 一行一张卡（行首 [分组名] 可切换分组）；docx 按段落取文字；json 支持 {"groups":[{"name":"分组","cards":["卡"]}]}、[{"name":"分组","cards":[...]}]、{"分组":["卡"]} 等写法，新分组自动创建，同名分组直接并入原分组。</div>' +
-      '<div class="grp-bar" style="margin-top:6px">' +
-      state.groups
-        .filter(g => g.id !== "none")
-        .map(g => '<button class="grp-chip" data-act="renameGroup" data-gid="' + esc(g.id) + '">✎ ' + esc(g.name) + "</button>")
-        .join("") +
-      "</div>" +
+      '<div class="note">「导入文件」支持 txt / docx / json：txt 一行一张卡（行首 [分组名] 可切换分组）；docx 按段落取文字；json 里若出现新分组会自动创建，同名分组则直接并入原分组；重复字卡会自动跳过。</div>' +
       '<div id="cardList" style="margin-top:6px"></div>' +
       "</div>";
 
@@ -3578,9 +3593,11 @@ if (m.kind === "pat") {
       return;
     }
     const grp = ev.target.closest("[data-grp]");
-    if (grp) {
+    if (grp && !ev.target.closest("[data-act]")) {
       cardGroup = grp.dataset.grp;
       openSettings(setTab);
+      const nm = cardGroup === "all" ? "全部字卡" : groupName(cardGroup);
+      toast(cardBatch && cardGroup !== "all" ? "已选中「" + nm + "」气泡，点批量删除可整组清空" : "已切换到「" + nm + "」");
       return;
     }
     const ag = ev.target.closest("[data-addgrp]");
@@ -3721,6 +3738,7 @@ if (m.kind === "pat") {
       cardBatch = !cardBatch;
       cardPick = {};
       renderCardList();
+      groupBarRefresh();
     } else if (a === "cardPickAll") {
       filteredCards().forEach(o => (cardPick[o.i] = true));
       renderCardList();
@@ -3743,16 +3761,71 @@ if (m.kind === "pat") {
       renderCardList();
       toast("已移动 " + picked.length + " 条到「" + groupName(gid) + "」");
     } else if (a === "cardBatchDel") {
-      const picked = Object.keys(cardPick).filter(k => cardPick[k]).map(Number).sort((x, y) => y - x);
-      if (!picked.length) {
-        toast("先在批量管理里勾选字卡");
+      const picked = Object.keys(cardPick).filter(k => cardPick[k]).map(Number);
+      if (picked.length) {
+        if (!confirm("删除选中的 " + picked.length + " 张字卡？")) return;
+        picked
+          .sort((x, y) => y - x)
+          .forEach(i => state.cards.splice(i, 1));
+        cardPick = {};
+        persist();
+        renderCardList();
+        syncSettingUI();
+        toast("已删除 " + picked.length + " 条");
         return;
       }
-      picked.forEach(i => state.cards.splice(i, 1));
+      if (!cardBatch) {
+        toast("删除整组请先进入「批量管理」并选中分组气泡");
+        return;
+      }
+      if (cardGroup === "all") {
+        toast("先选中一个分组气泡");
+        return;
+      }
+      const inGroup = state.cards.filter(c => (c.group || "none") === cardGroup);
+      const name = groupName(cardGroup);
+      if (cardGroup === "none") {
+        if (!inGroup.length) {
+          toast("「未分组」里没有字卡");
+          return;
+        }
+        if (!confirm("清空「未分组」里的全部 " + inGroup.length + " 张字卡？")) return;
+        state.cards = state.cards.filter(c => (c.group || "none") !== "none");
+        cardPick = {};
+        persist();
+        openSettings(setTab);
+        toast("已清空未分组");
+        return;
+      }
+      if (!confirm("删除分组「" + name + "」及其中全部 " + inGroup.length + " 张字卡？\n（分组和内容都会消失，不可恢复）")) return;
+      state.cards = state.cards.filter(c => (c.group || "none") !== cardGroup);
+      state.groups = state.groups.filter(x => x.id !== cardGroup);
+      if (addGroup === cardGroup) addGroup = "none";
+      cardGroup = "all";
       cardPick = {};
       persist();
-      renderCardList();
-      toast("已删除 " + picked.length + " 条");
+      openSettings(setTab);
+      toast("已删除分组「" + name + "」及 " + inGroup.length + " 张字卡");
+    } else if (a === "delGroup") {
+      const gid = act.dataset.gid;
+      const g = state.groups.filter(x => x.id === gid)[0];
+      if (!g) return;
+      const n = groupCount(gid);
+      if (gid === "none") {
+        toast("「未分组」会一直保留，可切换后在批量管理里清空");
+        return;
+      }
+      if (!confirm("删除分组「" + g.name + "」？\n里面的 " + n + " 张字卡会自动移到「未分组」")) return;
+      state.cards.forEach(c => {
+        if ((c.group || "none") === gid) c.group = "none";
+      });
+      state.groups = state.groups.filter(x => x.id !== gid);
+      if (cardGroup === gid) cardGroup = "all";
+      if (addGroup === gid) addGroup = "none";
+      cardPick = {};
+      persist();
+      openSettings(setTab);
+      toast("已删除分组「" + g.name + "」" + (n ? "，" + n + " 张字卡已移到未分组" : ""));
     } else if (a === "addGroupNew") {
       const name = (prompt("新分组名称") || "").trim();
       if (!name) return;
