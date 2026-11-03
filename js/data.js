@@ -192,7 +192,11 @@ const EMOJI_GROUPS = {
     { id: "round", name: "圆润（默认）" },
     { id: "card", name: "字卡（描边）" },
     { id: "sharp", name: "方正" },
-    { id: "outline", name: "描边" }
+    { id: "tail", name: "小尾巴（QQ 经典）" },
+    { id: "pill", name: "胶囊（超大圆角）" },
+    { id: "grad", name: "渐变（亮面）" },
+    { id: "paper", name: "便签（左侧色条）" },
+    { id: "glass", name: "玻璃（半透明）" }
   ];
 
   const FONTS = [

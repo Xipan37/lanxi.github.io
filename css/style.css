@@ -113,8 +113,25 @@ img.avatar{object-fit:cover;display:block}
   padding:14px 16px;letter-spacing:.04em}
 .msg.me .bubble.card{border-color:var(--my-bubble)}
 .bubble.sharp{border-radius:3px}
-.bubble.outline{background:transparent;box-shadow:none;border:1.5px solid var(--border)}
-.msg.me .bubble.outline{color:var(--primary)}
+.bubble.tail{border-radius:17px 17px 17px 5px}
+.msg.me .bubble.tail{border-radius:17px 17px 5px 17px}
+.bubble.pill{border-radius:26px;padding:11px 19px}
+.bubble.grad{
+  background-image:linear-gradient(135deg,rgba(255,255,255,.34),rgba(255,255,255,0) 55%);
+  border-radius:18px;
+}
+.msg.me .bubble.grad{background-image:linear-gradient(135deg,rgba(255,255,255,.28),rgba(0,0,0,.05) 60%)}
+.bubble.paper{
+  background:var(--panel);color:var(--text);border:1px solid var(--border);border-left:3px solid var(--primary);
+  border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.05);padding:12px 15px;
+}
+.msg.me .bubble.paper{color:var(--text);border-left-color:var(--my-bubble)}
+.bubble.glass{
+  background:rgba(255,255,255,.55);color:var(--text);border:1px solid rgba(255,255,255,.75);
+  box-shadow:0 4px 16px rgba(0,0,0,.07);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+}
+.msg.me .bubble.glass{background:rgba(255,255,255,.66);color:var(--text)}
 .bubble.sticker{background:transparent;box-shadow:none;padding:4px}
 .bubble.sticker img{max-width:min(58vw,240px);max-height:min(52vh,300px);border-radius:12px;display:block;object-fit:contain}
 .bubble.flash{animation:flash 1.4s}

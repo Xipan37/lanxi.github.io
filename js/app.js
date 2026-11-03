@@ -293,8 +293,8 @@ if (m.kind === "pat") {
     }
 
     const person = m.role === "me" ? state.user : state.peer;
-    const styleCls =
-      S().bubbleStyle === "card" ? " card" : S().bubbleStyle === "sharp" ? " sharp" : S().bubbleStyle === "outline" ? " outline" : "";
+    const bs = S().bubbleStyle || "round";
+    const styleCls = ["card", "sharp", "tail", "pill", "grad", "paper", "glass"].indexOf(bs) >= 0 ? " " + bs : "";
     let body = "";
     let timeText = timeLabel(m.ts);
     if (m.recalled) {

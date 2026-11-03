@@ -149,6 +149,7 @@ const Store = (function () {
     merged.user.emoji = merged.user.emoji || base.user.emoji;
     merged.peer.emoji = merged.peer.emoji || base.peer.emoji;
     merged.settings = Object.assign({}, base.settings, saved.settings || {});
+    if (merged.settings.bubbleStyle === "outline") merged.settings.bubbleStyle = "round";
     merged.timers = saved.timers && typeof saved.timers === "object" ? saved.timers : {};
     merged.cards = normalizeCards(saved.cards);
     if (!merged.atmo || typeof merged.atmo !== "object") {
