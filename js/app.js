@@ -55,6 +55,8 @@
   let setTab = "reply";
   let diaryDay = Date.now();
   let letterView = null;
+  let letterTab = "out";
+  let letterCompose = false;
   let dateForm = null;
   let dateType = "anniv";
   let quizForm = null;
@@ -393,7 +395,9 @@ if (m.kind === "pat") {
     const favs = state.messages.filter(m => m.fav).length;
     el.favBadge.hidden = favs === 0;
     el.favBadge.textContent = favs;
-    const unread = state.letters.filter(l => l.dir === "in" && !l.read).length;
+    const unread = state.letters.filter(
+      l => (l.dir === "in" && !l.read) || (l.replies || []).some(r => r.role === "ai" && r.read === false)
+    ).length;
     el.letterBadge.hidden = unread === 0;
     el.letterBadge.textContent = unread;
     const qUnread = (state.quizzes || []).filter(q => !q.read && q.status !== "pending").length;
@@ -942,20 +946,14 @@ if (m.kind === "pat") {
     armLetterReplies();
     const l = state.letters.filter(x => x.id === id)[0];
     if (!l) return;
-    const letter = {
-      id: uid(),
-      dir: "in",
-      title: "一条来自" + state.peer.name + "的讯息请查收",
-      content: buildLetterText(),
-      ts: Date.now(),
-      read: false
-    };
-    state.letters.push(letter);
+    if (!Array.isArray(l.replies)) l.replies = [];
+    l.replies.push({ role: "ai", text: buildLetterText(), ts: Date.now(), read: false });
     l.replied = true;
-    l.replyId = letter.id;
-    pushMsg({ role: "ai", kind: "letter", text: "", letterId: letter.id });
+    l.replyId = null;
+    pushMsg({ role: "ai", kind: "letter", text: "", letterId: l.id });
     pushMsg({ role: "ai", kind: "note", text: state.peer.name + " 回信了，去「写信」里看看吧" });
     renderAll(true);
+    if (!el.modal.hidden && el.modalTitle.textContent === "信件") renderLetterPanel();
     toast(state.peer.name + " 回信了 ✉️");
   }
 
@@ -1156,7 +1154,9 @@ if (m.kind === "pat") {
     pushMsg({ role: "me", kind: "letter", text: "", letterId: letter.id });
     const s = S();
     if (!state.timers.letterReplies) state.timers.letterReplies = {};
-    const delay = randInt(s.letterReplyMin, Math.max(s.letterReplyMin, s.letterReplyMax)) * 60000;
+    const mn = Math.max(0.05, Number(s.letterReplyMin) || 1);
+    const mx = Math.max(mn, Number(s.letterReplyMax) || mn);
+    const delay = Math.max(1000, Math.round(rand(mn * 60000, mx * 60000)));
     state.timers.letterReplies[letter.id] = Date.now() + delay;
     persist();
     armLetterReplies();
@@ -1653,9 +1653,30 @@ if (m.kind === "pat") {
     root.setProperty("--ai-text", readable(s.aiBubble || theme.aiBubble));
     root.setProperty("--font", (DATA.FONTS.filter(f => f.id === s.font)[0] || DATA.FONTS[0]).css);
     root.setProperty("--fs", s.fontSize + "px");
+    const lt = s.primary || theme.primary;
+    root.setProperty("--lt-1", mixHex(lt, "#ffffff", 0.66));
+    root.setProperty("--lt-2", mixHex(lt, "#ffffff", 0.46));
+    root.setProperty("--lt-3", mixHex(lt, "#ffffff", 0.24));
+    root.setProperty("--lt-ink", mixHex(lt, "#000000", 0.26));
+    root.setProperty("--lt-line", mixHex(lt, "#ffffff", 0.82));
     el.chat.style.background = s.chatImage ? 'url("' + s.chatImage + '") center/cover' : (s.chatColor || theme.chat);
     const meta = document.querySelector('meta[name=theme-color]');
     if (meta) meta.setAttribute("content", s.primary || theme.primary);
+  }
+
+  function mixHex(a, b, t) {
+    const pa = hexParts(a);
+    const pb = hexParts(b);
+    const ch = i => Math.round(pa[i] + (pb[i] - pa[i]) * t).toString(16).padStart(2, "0");
+    return "#" + ch(0) + ch(1) + ch(2);
+  }
+
+  function hexParts(hex) {
+    let h = String(hex || "#888888").replace("#", "").trim();
+    if (h.length === 3) h = h.split("").map(x => x + x).join("");
+    if (h.length !== 6 || /[^0-9a-fA-F]/.test(h)) h = "888888";
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   }
 
   function hexA(hex, a) {
@@ -1686,6 +1707,7 @@ if (m.kind === "pat") {
     el.modal.hidden = true;
     el.modalBody.innerHTML = "";
     letterView = null;
+    letterCompose = false;
     if (typeof scrollChatToEnd === "function") scrollChatToEnd(false);
   }
 
@@ -2530,6 +2552,7 @@ if (m.kind === "pat") {
 
   function openLetter() {
     letterView = null;
+    letterCompose = false;
     renderLetterPanel();
   }
 
@@ -2574,6 +2597,9 @@ if (m.kind === "pat") {
     if (letterView) {
       const l = letterView;
       l.read = true;
+      (l.replies || []).forEach(r => {
+        if (r.role === "ai" && r.read === false) r.read = true;
+      });
       persist();
       renderBadges();
       const thread = (l.replies || [])
@@ -2602,30 +2628,77 @@ if (m.kind === "pat") {
       openModal("信件", html);
       return;
     }
-    const list = state.letters.slice().sort((a, b) => b.ts - a.ts);
+    if (letterCompose) {
+      renderLetterCompose();
+      return;
+    }
+    const list = state.letters
+      .filter(l => (letterTab === "out" ? l.dir === "out" : l.dir === "in"))
+      .slice()
+      .sort((a, b) => b.ts - a.ts);
     const items = list.length
       ? list
-          .map(
-            l =>
-              '<div class="letter-item" data-letter-open="' + l.id + '" style="cursor:pointer"><h4>✉️ ' + esc(l.title) +
-              (l.dir === "out" ? "" : l.read ? "" : ' <span class="tag">未读</span>') +
-              (l.dir === "out" ? "" : (l.replies || []).length ? ' <span class="tag done">已回复</span>' : ' <span class="tag wait">待回复</span>') +
-              (l.dir === "out" && !l.replied ? ' <span class="tag wait">等待回信</span>' : "") +
-              "</h4>" +
-              '<div class="meta-line">' + (l.dir === "out" ? "寄给" + esc(state.peer.name) : esc(state.peer.name) + " 寄给你") + " · " + fmtDate(l.ts) + " " + fmtTime(l.ts) + "</div>" +
-              "<p style='margin:0;color:var(--sub);font-size:.86em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'>" +
-              esc((l.content || "").replace(/\n/g, " ")) + "</p></div>"
-          )
+          .map(l => {
+            const isOut = l.dir === "out";
+            const nReply = (l.replies || []).length;
+            const aiUnread = (l.replies || []).some(r => r.role === "ai" && r.read === false);
+            let status;
+            if (isOut) status = l.replied ? "✓ 已收到回信" : "⏳ 等待回信";
+            else status = nReply ? "✓ 已回复 " + nReply + " 次" : "⏳ 待回复";
+            if (!isOut && !l.read) status += " · 未读";
+            if (aiUnread) status += " · 有新回信";
+            const preview = esc((l.content || "").replace(/\n+/g, " ").slice(0, 80));
+            const orig = !isOut && l.replies && l.replies.length
+              ? '<div class="mc-orig">' + esc((l.content || "").replace(/\n+/g, " ").slice(0, 40)) + "…</div>"
+              : "";
+            const when = fmtDate(l.ts) + " " + fmtTime(l.ts);
+            return (
+              '<div class="mail-card ' + (isOut ? "out" : "in") + '" data-letter-open="' + esc(l.id) + '">' +
+              '<div class="mc-head">' +
+              '<span class="mc-ico">' + (isOut ? "✈" : "✉") + "</span>" +
+              '<span class="mc-when">' + (isOut ? "寄出" : "收到") + " · " + esc(when) + "</span>" +
+              '<span class="mc-mark">' + (isOut ? "✎" : "⌂") + "</span>" +
+              "</div>" +
+              '<div class="mc-body">' +
+              orig +
+              '<div class="mc-title">' + esc(l.title || "（无标题）") + "</div>" +
+              '<div class="mc-preview">' + preview + "</div>" +
+              '<div class="mc-foot"><span class="mc-status">' + esc(status) + "</span>" +
+              '<button class="mc-del" data-act="letterDel" data-id="' + esc(l.id) + '" title="删除">×</button></div>' +
+              "</div></div>"
+            );
+          })
           .join("")
-      : '<div class="empty">还没有信件，写一封给 ' + esc(state.peer.name) + " 吧</div>";
+      : '<div class="empty">还没有' + (letterTab === "out" ? "寄出的" : "收到的") + "信</div>";
     const html =
+      '<div class="letter-hub">' +
+      '<i class="lh-flap"></i>' +
+      '<div class="lh-ico">✉</div>' +
+      "<h3>信封投递</h3>" +
+      '<div class="lh-sub">LETTERS · CORRESPONDENCE</div>' +
+      "</div>" +
+      '<div class="letter-tabs">' +
+      '<button class="' + (letterTab === "out" ? "on" : "") + '" data-act="letterTabOut"><span>➤</span>寄出的信</button>' +
+      '<button class="' + (letterTab === "in" ? "on" : "") + '" data-act="letterTabIn"><span>➷</span>收到的信</button>' +
+      "</div>" +
+      '<div class="letter-list">' + items + "</div>" +
+      '<div class="letter-actions">' +
+      '<button class="btn letter-new" data-act="letterNew"><span>✎</span>提笔写信</button>' +
+      '<button class="btn ghost" data-act="letterClose">关闭</button>' +
+      "</div>";
+    openModal("信件", html);
+  }
+
+  function renderLetterCompose() {
+    const html =
+      '<div class="row" style="margin-bottom:10px"><button class="btn tiny ghost" data-act="letterComposeBack">← 返回</button>' +
+      '<b style="font-size:1em;margin-left:6px">写给 ' + esc(state.peer.name) + "</b></div>" +
       '<div class="card-box"><div class="field"><label>标题</label><input type="text" id="letterTitle" placeholder="写给 ' + esc(state.peer.name) + ' 的信"></div>' +
       '<div class="field"><label>内容</label><textarea id="letterContent" placeholder="想说的话都可以写在这里…"></textarea></div>' +
       '<button class="btn block" data-act="sendLetter">寄出</button>' +
       '<div class="note">' + esc(state.peer.name) + " 会在设定的等待时间内回信（最长 12 小时），回信内容由字卡库随机抽取 " +
-      S().letterSentMin + "~" + S().letterSentMax + " 句。</div></div>" +
-      '<div style="height:14px"></div>' + items;
-    openModal("写信 · " + state.peer.name, html);
+      S().letterSentMin + "~" + S().letterSentMax + " 句。</div></div>";
+    openModal("提笔写信 · " + state.peer.name, html);
   }
 
   /* ===================== 通话 ===================== */
@@ -4109,7 +4182,7 @@ if (m.kind === "pat") {
       return;
     }
     const letterOpen = ev.target.closest("[data-letter-open]");
-    if (letterOpen) {
+    if (letterOpen && !ev.target.closest("[data-act]")) {
       letterView = state.letters.filter(l => l.id === letterOpen.dataset.letterOpen)[0] || null;
       renderLetterPanel();
       return;
@@ -4549,6 +4622,8 @@ if (m.kind === "pat") {
         return;
       }
       sendLetter(t || pickOne(DATA.LETTER_TITLES), c);
+      letterCompose = false;
+      letterTab = "out";
       renderLetterPanel();
     } else if (a === "sendLetterReply") {
       if (letterView) sendLetterReply(letterView.id);
@@ -4556,6 +4631,35 @@ if (m.kind === "pat") {
     } else if (a === "letterBack") {
       letterView = null;
       renderLetterPanel();
+    } else if (a === "letterTabOut" || a === "letterTabIn") {
+      letterTab = a === "letterTabIn" ? "in" : "out";
+      renderLetterPanel();
+    } else if (a === "letterNew") {
+      letterCompose = true;
+      renderLetterPanel();
+      setTimeout(() => {
+        const t = $("#letterTitle");
+        if (t) t.focus();
+      }, 120);
+    } else if (a === "letterComposeBack") {
+      letterCompose = false;
+      renderLetterPanel();
+    } else if (a === "letterClose") {
+      closeModal();
+    } else if (a === "letterDel") {
+      const id = act.dataset.id;
+      const l = state.letters.filter(x => x.id === id)[0];
+      if (!l) return;
+      if (!confirm("删除这封信？相关的聊天卡片也会一起消失")) return;
+      state.letters = state.letters.filter(x => x.id !== id);
+      if (state.timers.letterReplies) delete state.timers.letterReplies[id];
+      state.messages = state.messages.filter(m => !(m.kind === "letter" && m.letterId === id));
+      if (letterView && letterView.id === id) letterView = null;
+      persist();
+      renderBadges();
+      renderAll(true);
+      renderLetterPanel();
+      toast("已删除");
     } else if (a === "datesClose") {
       closeModal();
     } else if (a === "dateAdd") {

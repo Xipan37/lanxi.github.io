@@ -774,3 +774,64 @@ input[type=color]{width:44px;height:34px;padding:2px;border:1px solid var(--bord
 .atm-block:first-of-type{border-top:none;padding-top:0;margin-top:6px}
 .atm-add{display:flex;gap:8px;margin:8px 0 4px}
 .atm-add input{flex:1;min-width:0}
+
+/* ===================== 信件页（信封投递风格） ===================== */
+
+
+/* ===================== 信件页（信封投递风格） ===================== */
+.letter-hub{
+  position:relative;margin:-16px -16px 14px;padding:22px 16px 30px;overflow:hidden;
+  background:linear-gradient(180deg,var(--lt-1,#dccdb6),var(--lt-2,#c9b396));text-align:center;color:#fff;
+  box-shadow:0 6px 18px rgba(0,0,0,.08);
+}
+.lh-flap{
+  position:absolute;left:50%;bottom:-1px;width:0;height:0;transform:translateX(-50%);
+  border-left:60vw solid transparent;border-right:60vw solid transparent;
+  border-top:34px solid var(--lt-2,#c9b396);
+}
+.lh-ico{font-size:32px;line-height:1;opacity:.96;position:relative}
+.letter-hub h3{position:relative;margin:8px 0 4px;font-size:1.18em;letter-spacing:.22em;font-weight:500}
+.lh-sub{position:relative;font-size:.6em;letter-spacing:.3em;opacity:.9;font-style:italic}
+.letter-tabs{display:flex;gap:10px;margin:0 0 14px}
+.letter-tabs button{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:11px 8px;
+  border-radius:12px;border:1.5px solid var(--border);background:var(--panel);color:var(--sub);font-size:.9em;
+}
+.letter-tabs button span{font-size:.95em;opacity:.8}
+.letter-tabs button.on{border-color:var(--lt-2,#c7a97e);color:var(--lt-ink,#a07c4e);background:var(--lt-line,#fdf9f3);box-shadow:0 0 0 2px rgba(0,0,0,.03)}
+.letter-list{display:flex;flex-direction:column;gap:12px}
+.mail-card{
+  border-radius:15px;overflow:hidden;background:var(--panel);border:1px solid var(--lt-line,#ecdfcc);
+  box-shadow:0 3px 10px rgba(0,0,0,.06);cursor:pointer;transition:.15s;
+}
+.mail-card:active{transform:scale(.995)}
+.mc-head{
+  display:flex;align-items:center;gap:8px;padding:11px 13px;
+  background:linear-gradient(90deg,var(--lt-2,#cdb694),var(--lt-3,#c3a884));color:#fff;font-size:.84em;
+}
+.mc-head .mc-when{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mc-head .mc-ico{opacity:.95}
+.mc-head .mc-mark{
+  margin-left:auto;flex:none;width:30px;height:30px;border-radius:9px;
+  background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.55);
+  display:flex;align-items:center;justify-content:center;font-size:.95em;
+}
+.mail-card.in .mc-head{background:linear-gradient(90deg,var(--lt-1,#d6c6ad),var(--lt-2,#c8ae8c))}
+.mc-body{padding:12px 14px 8px}
+.mc-orig{
+  font-size:.82em;color:var(--sub);border-left:3px solid var(--lt-2,#ddc9ae);padding-left:9px;margin-bottom:8px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.mc-title{font-size:.9em;color:var(--sub);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mc-preview{font-size:.95em;line-height:1.75;color:var(--text);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.mc-foot{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:8px;border-top:1px dashed var(--lt-line,#efe4d4);font-size:.78em;color:var(--sub)}
+.mc-del{margin-left:auto;border:none;background:none;color:var(--sub);font-size:1.15em;line-height:1;padding:2px 6px;border-radius:8px}
+.mc-del:active{background:var(--bg)}
+.letter-actions{display:flex;gap:12px;margin-top:16px;position:sticky;bottom:-16px;background:var(--bg);padding:12px 0 4px}
+.letter-new{
+  flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:14px;border-radius:14px;
+  background:linear-gradient(180deg,var(--lt-2,#cdb694),var(--lt-ink,#bd9d76));color:#fff;border:none;font-size:1em;
+  box-shadow:0 6px 16px rgba(0,0,0,.12);
+}
+.letter-new span{font-size:1.05em}

@@ -166,7 +166,15 @@ const EMOJI_GROUPS = {
     { id: "matcha", name: "抹茶", primary: "#8fbf9f", primarySoft: "#dceee2", bg: "#f6faf6", panel: "#ffffff", chat: "#ecf4ee", text: "#2b342c", sub: "#8b9a8e", border: "#dfeae1", myBubble: "#8fbf9f", aiBubble: "#ffffff" },
     { id: "dusk", name: "暮色", primary: "#9b8cd8", primarySoft: "#e0daf6", bg: "#f7f5fd", panel: "#ffffff", chat: "#f0ecf9", text: "#2e2a3a", sub: "#918aa8", border: "#e6e0f4", myBubble: "#9b8cd8", aiBubble: "#ffffff" },
     { id: "ocean", name: "深海", primary: "#5fa8b8", primarySoft: "#d5eaee", bg: "#f4fafb", panel: "#ffffff", chat: "#e8f3f5", text: "#26333a", sub: "#84969c", border: "#dbeaec", myBubble: "#5fa8b8", aiBubble: "#ffffff" },
-    { id: "night", name: "夜幕", primary: "#7b6b8f", primarySoft: "#ded6e6", bg: "#f5f3f7", panel: "#ffffff", chat: "#ebe8f0", text: "#2a2530", sub: "#8d8695", border: "#e2dee8", myBubble: "#6d5c85", aiBubble: "#ffffff" }
+    { id: "night", name: "夜幕", primary: "#7b6b8f", primarySoft: "#ded6e6", bg: "#f5f3f7", panel: "#ffffff", chat: "#ebe8f0", text: "#2a2530", sub: "#8d8695", border: "#e2dee8", myBubble: "#6d5c85", aiBubble: "#ffffff" },
+    { id: "latte", name: "奶咖", primary: "#b08a6a", primarySoft: "#efe2d6", bg: "#fbf7f2", panel: "#ffffff", chat: "#f4ece3", text: "#332c26", sub: "#9b8f84", border: "#ece0d3", myBubble: "#b08a6a", aiBubble: "#ffffff" },
+    { id: "rose", name: "玫瑰金", primary: "#c98a92", primarySoft: "#f6dfe1", bg: "#fdf7f7", panel: "#ffffff", chat: "#f7edee", text: "#332a2c", sub: "#9c8d90", border: "#f0e0e2", myBubble: "#c98a92", aiBubble: "#ffffff" },
+    { id: "mint", name: "薄荷", primary: "#61b8a4", primarySoft: "#d6efe8", bg: "#f4fbf9", panel: "#ffffff", chat: "#e9f5f1", text: "#25332f", sub: "#84968f", border: "#d8eae4", myBubble: "#61b8a4", aiBubble: "#ffffff" },
+    { id: "soda", name: "橘子汽水", primary: "#ef9a5a", primarySoft: "#fde3cc", bg: "#fff9f3", panel: "#ffffff", chat: "#fcf1e5", text: "#352d25", sub: "#a09081", border: "#f4e3d1", myBubble: "#ef9a5a", aiBubble: "#ffffff" },
+    { id: "grape", name: "葡萄紫", primary: "#8f7cc9", primarySoft: "#e3dcf6", bg: "#f8f6fd", panel: "#ffffff", chat: "#f1ecfa", text: "#2c2639", sub: "#8e87a4", border: "#e5dff3", myBubble: "#8f7cc9", aiBubble: "#ffffff" },
+    { id: "ink", name: "墨黑", primary: "#5b6068", primarySoft: "#e2e4e7", bg: "#f7f8f9", panel: "#ffffff", chat: "#eef0f2", text: "#24262a", sub: "#8a8f96", border: "#e3e6e9", myBubble: "#4b5057", aiBubble: "#ffffff" },
+    { id: "lilac", name: "丁香", primary: "#a98bc7", primarySoft: "#ece0f5", bg: "#fbf8fd", panel: "#ffffff", chat: "#f4eefa", text: "#302937", sub: "#958ba4", border: "#ece2f4", myBubble: "#a98bc7", aiBubble: "#ffffff" },
+    { id: "cocoa", name: "可可", primary: "#8a6a58", primarySoft: "#eadfd8", bg: "#faf6f3", panel: "#ffffff", chat: "#f2eae4", text: "#2f2823", sub: "#978b82", border: "#eaddd6", myBubble: "#8a6a58", aiBubble: "#ffffff" }
   ];
   THEMES.forEach(function (t) {
     if (!t.primarySoft) t.primarySoft = t.primary + "33";
