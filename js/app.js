@@ -3119,7 +3119,7 @@ if (m.kind === "pat") {
     rect.hidden = shape === "circle";
     if (circle) circle.hidden = shape !== "circle";
     if (ratios) ratios.style.display = shape === "circle" ? "none" : "";
-    if (titleEl) titleEl.textContent = shape === "circle" ? "移动和缩放（双指缩放 / 拖动）" : "划定截取范围";
+    if (titleEl) titleEl.textContent = shape === "circle" ? "移动和缩放（双指缩放圆圈 / 拖动移动）" : "划定截取范围";
     el.cropOk.textContent = shape === "circle" ? "完成" : "确定截取";
 
     setTimeout(() => {
@@ -3268,7 +3268,10 @@ if (m.kind === "pat") {
       holder.style.height = baseH + "px";
       holder.style.marginLeft = -baseW / 2 + "px";
       holder.style.marginTop = -baseH / 2 + "px";
-      const D = Math.round(Math.min(W, H) * 0.74);
+      const short = Math.min(W, H);
+      const maxD = Math.max(60, Math.round(short));
+      const minD = Math.max(56, Math.round(short * 0.3));
+      const D = Math.round(short * 0.74);
       cropper = {
         shape: "circle",
         img: img,
@@ -3278,8 +3281,9 @@ if (m.kind === "pat") {
         W: W,
         H: H,
         D: D,
+        minD: minD,
+        maxD: maxD,
         base: { w: baseW, h: baseH },
-        sc: 1,
         tx: 0,
         ty: 0,
         pts: {}
@@ -3294,13 +3298,16 @@ if (m.kind === "pat") {
 
     function applyCircle() {
       const c = cropper;
-      const w = c.base.w * c.sc;
-      const h = c.base.h * c.sc;
-      const limX = Math.max(0, (w - c.D) / 2);
-      const limY = Math.max(0, (h - c.D) / 2);
+      c.D = Math.round(clamp(c.D, c.minD, c.maxD));
+      const limX = Math.max(0, (c.base.w - c.D) / 2);
+      const limY = Math.max(0, (c.base.h - c.D) / 2);
       c.tx = clamp(c.tx, -limX, limX);
       c.ty = clamp(c.ty, -limY, limY);
-      holder.style.transform = "translate(" + c.tx + "px," + c.ty + "px) scale(" + c.sc + ")";
+      holder.style.transform = "translate(" + c.tx + "px," + c.ty + "px)";
+      if (circle) {
+        circle.style.width = c.D + "px";
+        circle.style.height = c.D + "px";
+      }
     }
 
     function ptList() {
@@ -3318,7 +3325,8 @@ if (m.kind === "pat") {
         cropper.pts[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
         const n = Object.keys(cropper.pts).length;
         if (n === 2) {
-          cropper.pinch = { d: Math.max(1, dist2()), sc: cropper.sc };
+          cropper.pinch = { d: Math.max(1, dist2()), D: cropper.D };
+          cropper.pan = null;
         } else if (n === 1) {
           cropper.pan = { x: ev.clientX, y: ev.clientY, tx: cropper.tx, ty: cropper.ty };
         }
@@ -3329,7 +3337,7 @@ if (m.kind === "pat") {
         cropper.pts[ev.pointerId] = { x: ev.clientX, y: ev.clientY };
         const n = Object.keys(cropper.pts).length;
         if (n >= 2 && cropper.pinch) {
-          cropper.sc = clamp((cropper.pinch.sc * dist2()) / cropper.pinch.d, 1, 8);
+          cropper.D = clamp((cropper.pinch.D * dist2()) / cropper.pinch.d, cropper.minD, cropper.maxD);
         } else if (n === 1 && cropper.pan) {
           cropper.tx = cropper.pan.tx + (ev.clientX - cropper.pan.x);
           cropper.ty = cropper.pan.ty + (ev.clientY - cropper.pan.y);
@@ -3348,7 +3356,7 @@ if (m.kind === "pat") {
       stage.onwheel = ev => {
         if (!cropper || cropper.shape !== "circle") return;
         ev.preventDefault();
-        cropper.sc = clamp(cropper.sc * Math.exp(-ev.deltaY * 0.0015), 1, 8);
+        cropper.D = clamp(cropper.D * Math.exp(-ev.deltaY * 0.0015), cropper.minD, cropper.maxD);
         applyCircle();
       };
     }
@@ -3358,8 +3366,8 @@ if (m.kind === "pat") {
       if (!c) return;
       const canvas = document.createElement("canvas");
       if (c.shape === "circle") {
-        const w = c.base.w * c.sc;
-        const h = c.base.h * c.sc;
+        const w = c.base.w;
+        const h = c.base.h;
         const left = c.W / 2 + c.tx - w / 2;
         const top = c.H / 2 + c.ty - h / 2;
         const cx = (c.W - c.D) / 2;
